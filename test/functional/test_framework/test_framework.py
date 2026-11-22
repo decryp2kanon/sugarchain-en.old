@@ -583,18 +583,14 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.wait_until(lambda: find_conn(from_connection, to_connection_subver, inbound=False) is not None)
         self.wait_until(lambda: find_conn(to_connection, from_connection_subver, inbound=True) is not None)
 
-        def check_bytesrecv(peer, msg_type, min_bytes_recv):
+        def pong_processed(peer):
             assert peer is not None, "Error: peer disconnected"
-            return peer['bytesrecv_per_msg'].pop(msg_type, 0) >= min_bytes_recv
+            return 'minping' in peer
 
-        # Poll until version handshake (fSuccessfullyConnected) is complete to
-        # avoid race conditions, because some message types are blocked from
-        # being sent or received before fSuccessfullyConnected.
-        #
-        # As the flag fSuccessfullyConnected is not exposed, check it by
-        # waiting for a pong, which can only happen after the flag was set.
-        self.wait_until(lambda: check_bytesrecv(find_conn(from_connection, to_connection_subver, inbound=False), 'pong', 29))
-        self.wait_until(lambda: check_bytesrecv(find_conn(to_connection, from_connection_subver, inbound=True), 'pong', 29))
+        # The socket can count pong bytes before the message loop processes them.
+        # minping is available after the first completed ping, even if it took 0 us.
+        self.wait_until(lambda: pong_processed(find_conn(from_connection, to_connection_subver, inbound=False)))
+        self.wait_until(lambda: pong_processed(find_conn(to_connection, from_connection_subver, inbound=True)))
 
     def disconnect_nodes(self, a, b):
         def disconnect_nodes_helper(node_a, node_b):
