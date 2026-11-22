@@ -1,152 +1,130 @@
 name: Windows package saved wallet check
-on:
+'on':
   push:
-    branches: [qa/windows-standard-wallet-report-20261121]
-
+    branches:
+    - qa/windows-standard-wallet-report-20261121
 permissions:
   contents: read
   actions: read
-
 defaults:
   run:
-    shell: pwsh
-
+    shell: bash
+env:
+  CI_FAILFAST_TEST_LEAVE_DANGLING: '1'
 jobs:
-  windows:
-    name: Windows, msvcrt, saved wallet restart
+  packages:
+    name: Build Windows wallet package, ${{ matrix.crt }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crt:
+        - msvcrt
+        - ucrt
+        include:
+        - crt: msvcrt
+          file-env: ./ci/test/00_setup_env_win64_msvcrt.sh
+          artifact-name: x86_64-w64-mingw32-executables
+        - crt: ucrt
+          file-env: ./ci/test/00_setup_env_win64.sh
+          artifact-name: x86_64-w64-mingw32ucrt-executables
+    env:
+      FILE_ENV: ${{ matrix.file-env }}
+      DANGER_CI_ON_HOST_FOLDERS: 1
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        ref: 4bc5009346decdbe3c5a54252a52a20a679636c8
+        persist-credentials: false
+    - name: Confirm the release source
+      run: test "$(git rev-parse HEAD)" = 4bc5009346decdbe3c5a54252a52a20a679636c8
+    - name: Configure environment
+      uses: ./.github/actions/configure-environment
+    - name: Restore caches
+      id: restore-cache
+      uses: ./.github/actions/cache/restore
+      with:
+        provider: gha
+    - name: Configure Docker
+      uses: ./.github/actions/configure-docker
+      with:
+        provider: gha
+    - name: CI script
+      run: ./ci/test_run_all.sh
+    - name: Save caches
+      uses: ./.github/actions/cache/save
+      with:
+        provider: gha
+    - name: Upload built executables
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ matrix.artifact-name }}-${{ github.run_id }}
+        path: |
+          ${{ env.BASE_BUILD_DIR }}/bin/*.dll
+          ${{ env.BASE_BUILD_DIR }}/bin/*.exe
+          ${{ env.BASE_BUILD_DIR }}/src/secp256k1/bin/*.exe
+          ${{ env.BASE_BUILD_DIR }}/src/univalue/*.exe
+          ${{ env.BASE_BUILD_DIR }}/test/config.ini
+          ${{ env.BASE_BUILD_DIR }}/*-win64-setup.exe
+          ${{ env.BASE_BUILD_DIR }}/windows-installer-path.txt
+  wallet:
+    name: Test new Windows wallet package, ${{ matrix.crt }}
     runs-on: windows-2022
-    timeout-minutes: 25
+    needs:
+    - packages
+    strategy:
+      fail-fast: false
+      matrix:
+        crt:
+        - msvcrt
+        - ucrt
+        include:
+        - crt: msvcrt
+          artifact-name: x86_64-w64-mingw32-executables
+        - crt: ucrt
+          artifact-name: x86_64-w64-mingw32ucrt-executables
     env:
       PYTHONUTF8: 1
       TEST_RUNNER_TIMEOUT_FACTOR: 40
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          persist-credentials: false
-
-      - name: Verify the published archive and wallet restart test scripts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $archive = gh api repos/decryp2kanon/sugarchain-en/actions/artifacts/14734565120 | ConvertFrom-Json
-          if ($LASTEXITCODE -or $archive.expired -or $archive.workflow_run.id -ne 44957257370 -or
-              $archive.workflow_run.head_sha -ne '6015ff58e90d328c86d50a4dad2c0e308f83e5a8' -or
-              $archive.digest -ne 'sha256:d4f87a050b22f4ed0dcba467f3f79e9b86edd6b23b1804a77d3f216c4bbdda23') {
-            throw "Unexpected published package"
-          }
-          $scripts = @{
-            '.github/ci-windows-smoke.py' = '3548586bc6895c3856d68a767b9a24736c764568'
-            '.github/ci-windows-installer.py' = '56ce1ef9c698bc02aa41e16a7b020813ac78ed6d'
-          }
-          foreach ($item in $scripts.GetEnumerator()) {
-            if ((git rev-parse "HEAD:$($item.Key)") -ne $item.Value) { throw "Acceptance source changed" }
-          }
-
-      - name: Prepare the native Windows release environment
-        shell: bash
-        run: py -3 .github/ci-windows.py standard github_import_vs_env
-
-      - name: Prepare the Microsoft Windows debugger
-        run: ./.github/windows-prepare-debugger.ps1
-
-      - name: Verify debugger stack reporting on a normally exiting test program
-        run: py -3 .github/windows-wallet-stack.py preflight
-
-      - name: Download the published MSVCRT package
-        uses: actions/download-artifact@v8
-        with:
-          name: x86_64-w64-mingw32-executables-44957257370
-          github-token: ${{ github.token }}
-          run-id: 44957257370
-          path: .
-
-      - name: Check the installer and enable local Qt exit reports
-        run: |
-          $installer = (Get-Item 'Sugarchain-En-31.1.0-win64-setup.exe').FullName
-          $installerHash = Get-FileHash $installer
-          $guiHash = Get-FileHash 'bin/sugarchain-qt.exe'
-          $installerHash | Format-List Algorithm,Hash
-          $guiHash | Format-List Algorithm,Hash
-          if ($installerHash.Hash -ne 'ca6d5937281943bb58be34eea1dc236c9880ee8542b9b0bf6cb51bda0c86ce33' -or
-              $guiHash.Hash -ne 'd1abaadf9c42b5b4e9cbd9ccabd9e77e706fe111b1acd8b500c9d3aefabd6a27') {
-            throw 'The installer or raw GUI differs from the previous Windows qualification.'
-          }
-          $reports = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'qt-local-exit-reports')
-          $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\sugarchain-qt.exe'
-          if (Test-Path -LiteralPath $key) { throw "Application report settings already exist" }
-          New-Item -Path $key -Force | Out-Null
-          "EN_QT_REPORT_KEY_CREATED=1" >> $env:GITHUB_ENV
-          New-ItemProperty -LiteralPath $key -Name DumpFolder -Value $reports.FullName -PropertyType ExpandString | Out-Null
-          New-ItemProperty -LiteralPath $key -Name DumpCount -Value 1 -PropertyType DWord | Out-Null
-          New-ItemProperty -LiteralPath $key -Name DumpType -Value 1 -PropertyType DWord | Out-Null
-
-      - name: Verify manifests and prepare release test data
-        shell: bash
-        run: |
-          py -3 .github/ci-windows-cross.py print_version
-          py -3 .github/ci-windows-cross.py check_manifests
-          py -3 .github/ci-windows-cross.py prepare_tests
-
-      - name: Create and reopen a Korean-named wallet with the published GUI
-        id: raw
-        shell: bash
-        run: |
-          date -u +%s > "$RUNNER_TEMP/en-wallet-qualification-start"
-          py -3 .github/ci-windows-normal-report.py .github/ci-windows-smoke.py --verify-wallet-restart --bindir bin --work-dir "${RUNNER_TEMP}/en-saved-wallet-msvcrt"
-
-      - name: Check saved wallet restart after installation and upgrade, then verify uninstall
-        id: installed
-        shell: bash
-        run: |
-          date -u +%s > "$RUNNER_TEMP/en-wallet-qualification-start"
-          py -3 .github/ci-windows-normal-report.py .github/ci-windows-installer.py --with-wallet-restart --installer Sugarchain-En-31.1.0-win64-setup.exe --work-dir "${RUNNER_TEMP}/en-installer-msvcrt"
-
-      - name: Read the local exception location
-        if: ${{ failure() && (steps.raw.outcome == 'failure' || steps.installed.outcome == 'failure') }}
-        env:
-          INSTALLED_OUTCOME: ${{ steps.installed.outcome }}
-        run: |
-          $download = Join-Path $env:RUNNER_TEMP 'qt-local-exit-reports'
-          if (!(Test-Path $download)) { Write-Output 'The report directory was not created.'; exit 0 }
-          $started = Get-Date
-          do {
-            $dumps = @(Get-ChildItem -LiteralPath $download -Filter 'sugarchain-qt.exe.*.dmp')
-            if ($dumps.Count -eq 0) { Start-Sleep -Seconds 2 }
-          } until ($dumps.Count -gt 0 -or (Get-Date) -gt $started.AddSeconds(30))
-          if ($dumps.Count -eq 0) { Write-Output 'Windows did not write a Qt exception report.'; exit 0 }
-          if ($dumps.Count -ne 1) { throw "Expected exactly one local Qt exit report" }
-          $dump = $dumps[0]
-          Write-Output "Local native report $($dump.Name)"
-          py -3 .github/ci-windows-minidump-summary.py $dump.FullName
-          if ($LASTEXITCODE) { throw "Windows exception summary could not be read" }
-          $startSeconds = [long](Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'en-wallet-qualification-start'))
-          $phaseStart = [DateTimeOffset]::FromUnixTimeSeconds($startSeconds).UtcDateTime
-          $reportName = [regex]::Match($dump.Name, '^sugarchain-qt\.exe\.(\d+)\.dmp$')
-          if ($dump.LastWriteTimeUtc -lt $phaseStart -or !$reportName.Success) {
-            throw 'The local Windows report does not match this wallet acceptance step.'
-          }
-          $walletProcessId = $reportName.Groups[1].Value
-          $executable = (Get-Item 'bin/sugarchain-qt.exe').FullName
-          if ($env:INSTALLED_OUTCOME -eq 'failure') {
-            $executable = (Get-Item (Join-Path $env:RUNNER_TEMP 'en-installer-msvcrt\Sugarchain En install\sugarchain-qt.exe')).FullName
-          }
-          py -3 .github/windows-wallet-stack.py report --dump $dump.FullName --image $executable --pid $walletProcessId
-          exit $LASTEXITCODE
-
-      - name: Remove local Windows exception data
-        if: always()
-        run: |
-          if ($env:EN_QT_REPORT_KEY_CREATED -eq '1') {
-            $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\sugarchain-qt.exe'
-            Remove-Item -LiteralPath $key -Recurse -Force
-            $reports = Join-Path $env:RUNNER_TEMP 'qt-local-exit-reports'
-            Remove-Item -LiteralPath $reports -Recurse -Force
-          }
-          if ($env:EN_QT_CDB_PRIVATE) {
-            $dir = Get-Item -LiteralPath $env:EN_QT_CDB_PRIVATE
-            $runnerTemp = (Get-Item -LiteralPath $env:RUNNER_TEMP).FullName
-            if ($dir.Parent.FullName -ne $runnerTemp -or $dir.Name -notmatch '^en-qa-cdb-[0-9a-f]{32}$') {
-              throw 'Unexpected private debugger directory'
-            }
-            Remove-Item -LiteralPath $dir.FullName -Recurse -Force
-          }
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        ref: 4bc5009346decdbe3c5a54252a52a20a679636c8
+        persist-credentials: false
+    - name: Confirm the release source
+      run: test "$(git rev-parse HEAD)" = 4bc5009346decdbe3c5a54252a52a20a679636c8
+    - name: Download built executables
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ matrix.artifact-name }}-${{ github.run_id }}
+    - name: Run sugarchaind.exe
+      run: py -3 .github/ci-windows-cross.py print_version
+    - name: Import Visual Studio env vars
+      run: py -3 .github/ci-windows.py "standard" github_import_vs_env
+    - name: Check executable manifests
+      run: py -3 .github/ci-windows-cross.py check_manifests
+    - name: Prepare Windows test environment
+      run: py -3 .github/ci-windows-cross.py prepare_tests
+    - name: Run native network, GUI and wallet smoke checks
+      run: py -3 .github/ci-windows-smoke.py --bindir bin --work-dir "${RUNNER_TEMP}/en-cross-smoke-${{ matrix.crt }}"
+    - name: Reopen a saved wallet in the native GUI
+      run: py -3 .github/ci-windows-smoke.py --verify-wallet-restart --bindir bin --work-dir "${RUNNER_TEMP}/en-cross-wallet-restart-${{ matrix.crt }}"
+    - name: Verify installed applications and installer lifecycle
+      run: |
+        py -3 .github/ci-windows-installer.py --with-wallet-restart \
+          --installer "$(basename "$(cat windows-installer-path.txt)")" \
+          --work-dir "${RUNNER_TEMP}/en-installer-${{ matrix.crt }}"
+    - name: Save the wallet and installer receipts
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: windows-wallet-receipts-${{ matrix.crt }}-${{ github.run_id }}
+        if-no-files-found: warn
+        path: |-
+          ${{ runner.temp }}/en-cross-smoke-${{ matrix.crt }}/results.json
+          ${{ runner.temp }}/en-cross-wallet-restart-${{ matrix.crt }}/wallet-restart-results.json
+          ${{ runner.temp }}/en-installer-${{ matrix.crt }}/installer-results.json
+          ${{ runner.temp }}/en-installer-${{ matrix.crt }}/installed-runtime/results.json
+          ${{ runner.temp }}/en-installer-${{ matrix.crt }}/installed-wallet-restart/wallet-restart-results.json
