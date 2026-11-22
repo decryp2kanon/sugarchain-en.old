@@ -9,6 +9,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 
 
@@ -150,10 +151,10 @@ def frames_from_output(output, modules, initial_pc):
     return frames[:12], clean_count, len(physical), END in markers, tid
 
 
-def invoke(cdb, cwd, args, timeout=35):
+def invoke(cdb, cwd, args, timeout=35, command_input=None):
     try:
         run = subprocess.run([str(cdb), "-sins", *args], cwd=cwd, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True,
+                             stderr=subprocess.STDOUT, stdin=command_input if command_input is not None else subprocess.DEVNULL, text=True,
                              errors="replace", timeout=timeout)
         return run.returncode, run.stdout
     except subprocess.TimeoutExpired:
@@ -162,13 +163,32 @@ def invoke(cdb, cwd, args, timeout=35):
 
 def read_stack(cdb, dump, image, modules, selector, expected_tid, initial_pc):
     image_paths = str(image.parent) + ";" + str(Path(os.environ["SystemRoot"]) / "System32")
-    commands = (f'{selector}; .printf "QA_CURRENT_TID %x\\n", @$tid; .printf "QA_CURRENT_IP %p\\n", @rip; .echo {NAME}; kcn 0xc; '
-                f'.echo {DETAIL}; kn 0xc; .echo {END}; q')
-    status, output = invoke(cdb, image.parent, ["-i", image_paths, "-y", str(image.parent), "-z", str(dump), "-c", commands])
+    commands = [selector,
+                '.printf "QA_CURRENT_TID %x\\n", @$tid',
+                '.printf "QA_CURRENT_IP %p\\n", @rip',
+                f'.echo {NAME}', "kcn 0xc", f'.echo {DETAIL}', "kn 0xc", f'.echo {END}', "q"]
+    # Put each command on a separate line. CDB reads its own command switches;
+    # nested quotes in .printf do not have to survive Windows argument parsing.
+    with tempfile.TemporaryDirectory(prefix="commands-", dir=os.environ["EN_QT_CDB_PRIVATE"]) as directory:
+        script = Path(directory) / "stack.txt"
+        script.write_bytes(("\r\n".join(commands) + "\r\n").encode("ascii"))
+        with script.open("rb") as command_input:
+            status, output = invoke(cdb, image.parent,
+                                    ["-i", image_paths, "-y", str(image.parent), "-cf", str(script), "-z", str(dump)],
+                                    command_input=command_input)
     frames, clean, physical, complete, tid = frames_from_output(output, modules, initial_pc)
     notes = ", ".join(v for k, v in STATIC_REASON.items() if k in output.lower()) or "none"
     print(f"CDB offline status={status} end-marker={complete} selected-tid={tid} expected-tid={expected_tid} "
           f"clean-sites={clean} physical-rows={physical} notes={notes}")
+    if image.name == "healthy_wallet_probe.exe" and (status != 0 or not complete or tid != expected_tid):
+        # Only the generated control has this name. Its debugger startup errors
+        # help distinguish a command parsing issue from a missing SDK component.
+        messages = [line.strip() for line in output.splitlines() if re.search(
+            r"error|failed|cannot|could not|couldn't|unable|incorrect|syntax|read fault|dump file|debugger version",
+            line, re.I)]
+        print(f"Healthy debugger output: {len(output)} characters, {len(messages)} diagnostic messages")
+        for line in messages[:12]:
+            print("Healthy debugger message:", line[:230])
     if status != 0 or not complete or tid != expected_tid or "context unavailable" in notes:
         raise RuntimeError("CDB did not confirm the requested stack context")
     for ordinal, origin, label in frames:

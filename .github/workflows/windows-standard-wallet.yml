@@ -42,6 +42,16 @@ jobs:
             if ((git rev-parse "HEAD:$($item.Key)") -ne $item.Value) { throw "Acceptance source changed" }
           }
 
+      - name: Prepare the native Windows release environment
+        shell: bash
+        run: py -3 .github/ci-windows.py standard github_import_vs_env
+
+      - name: Prepare the Microsoft Windows debugger
+        run: ./.github/windows-prepare-debugger.ps1
+
+      - name: Verify debugger stack reporting on a normally exiting test program
+        run: py -3 .github/windows-wallet-stack.py preflight
+
       - name: Download the published MSVCRT package
         uses: actions/download-artifact@v8
         with:
@@ -70,23 +80,12 @@ jobs:
           New-ItemProperty -LiteralPath $key -Name DumpCount -Value 1 -PropertyType DWord | Out-Null
           New-ItemProperty -LiteralPath $key -Name DumpType -Value 1 -PropertyType DWord | Out-Null
 
-      - name: Prepare the native Windows release environment
-        shell: bash
-        run: |
-          py -3 .github/ci-windows-cross.py print_version
-          py -3 .github/ci-windows.py standard github_import_vs_env
-
       - name: Verify manifests and prepare release test data
         shell: bash
         run: |
+          py -3 .github/ci-windows-cross.py print_version
           py -3 .github/ci-windows-cross.py check_manifests
           py -3 .github/ci-windows-cross.py prepare_tests
-
-      - name: Prepare the Microsoft Windows debugger
-        run: ./.github/windows-prepare-debugger.ps1
-
-      - name: Verify debugger stack reporting on a normally exiting test program
-        run: py -3 .github/windows-wallet-stack.py preflight
 
       - name: Run native daemon and wallet acceptance
         id: raw
