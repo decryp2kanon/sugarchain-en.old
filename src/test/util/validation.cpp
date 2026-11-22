@@ -15,7 +15,6 @@ using kernel::ChainstateRole;
 void TestBlockManager::CleanupForFuzzing()
 {
     m_dirty_blockindex.clear();
-    m_dirty_blockindex_resource.Release();
     m_dirty_fileinfo.clear();
     m_blockfile_info.resize(1);
 }

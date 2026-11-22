@@ -101,8 +101,9 @@ static void initialize()
     // - Randomness obtained before this call in g_rng_temp_path_init
     SeedRandomStateForTest(SeedRand::ZEROS);
 
-    // Set time to the genesis block timestamp for deterministic initialization.
+    // Fix both clocks before fixture initialization to avoid reading system time.
     SetMockTime(1231006505);
+    MockableSteadyClock::SetMockTime(MockableSteadyClock::INITIAL_MOCK_TIME);
 
     // Terminate immediately if a fuzzing harness ever tries to create a socket.
     // Individual tests can override this by pointing CreateSock to a mocked alternative.

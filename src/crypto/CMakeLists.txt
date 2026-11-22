@@ -29,6 +29,18 @@ target_link_libraries(bitcoin_crypto
     core_interface
 )
 
+# Preserve upstream tab indentation only in the imported Yespower C sources.
+# All other project warnings, including warnings-as-errors, remain enabled.
+include(CheckCCompilerFlag)
+check_c_compiler_flag("-Wleading-whitespace=blanks" C_SUPPORTS_WLEADING_WHITESPACE_BLANKS)
+if(C_SUPPORTS_WLEADING_WHITESPACE_BLANKS)
+  set_property(SOURCE
+    yespower-1.0.1/yespower-opt.c
+    yespower-1.0.1/sha256.c
+    APPEND PROPERTY COMPILE_OPTIONS "-Wleading-whitespace=blanks"
+  )
+endif()
+
 if(HAVE_SSE41)
   target_compile_definitions(bitcoin_crypto PRIVATE ENABLE_SSE41)
   target_sources(bitcoin_crypto PRIVATE sha256_sse41.cpp)

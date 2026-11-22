@@ -609,6 +609,9 @@ BOOST_AUTO_TEST_CASE(blockmanager_flush_block_file)
         BOOST_CHECK_EQUAL(blockman.m_dirty_blockindex.size(), 1000U);
         blockman.WriteBlockIndexDB();
         BOOST_CHECK(blockman.m_dirty_blockindex.empty());
+        // Shutdown can flush the index twice without any intervening changes.
+        blockman.WriteBlockIndexDB();
+        BOOST_CHECK(blockman.m_dirty_blockindex.empty());
         blockman.WriteBlockIndexDB(); // Releasing an already-empty pool is safe.
     }
     // Reopen the persisted DB after all dirty set nodes have been freed.

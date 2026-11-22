@@ -26,6 +26,9 @@ $(package)_patches += fix-gcc16-sfinae-qbitarray.patch
 $(package)_patches += fix-gcc16-sfinae-qanystringview.patch
 $(package)_patches += fix-macos26-qyield.patch
 $(package)_patches += fix-qbytearray-include.patch
+ifeq ($(host_os),mingw32)
+$(package)_patches += qtbase_windows_localserver_shutdown.patch
+endif
 
 $(package)_qttranslations_file_name=$(qt_details_qttranslations_file_name)
 $(package)_qttranslations_sha256_hash=$(qt_details_qttranslations_sha256_hash)
@@ -285,6 +288,9 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/fix-macos26-qyield.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix-qbytearray-include.patch
 endef
+ifeq ($(host_os),mingw32)
+  $(package)_preprocess_cmds += && patch -p1 -i $($(package)_patch_dir)/qtbase_windows_localserver_shutdown.patch
+endif
 ifeq ($(host),$(build))
   $(package)_preprocess_cmds += && patch -p1 -i $($(package)_patch_dir)/qttools_skip_dependencies.patch
 endif

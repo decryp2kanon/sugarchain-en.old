@@ -34,7 +34,8 @@ class SugarchainHeaderPoWTest(BitcoinTestFramework):
         assert_equal(node.getblockchaininfo()["chain"], "main")
         assert_equal(node.getblockcount(), 0)
         assert_equal(node.getpeerinfo(), [])
-        fixture = Path(__file__).resolve().parents[2] / "src/test/data/sugarchain_headers.raw"
+        source_dir = Path(self.config["environment"]["SRCDIR"])
+        fixture = source_dir / "src/test/data/sugarchain_headers.raw"
         raw = fixture.read_bytes()
         assert_equal(len(raw), 6000 * 80)
         headers = []
@@ -79,7 +80,8 @@ class SugarchainHeaderPoWTest(BitcoinTestFramework):
 
         # A cached valid header proves nothing about the supplied block body.
         # Mutate only the coinbase output, leaving the header/PoW unchanged.
-        raw_block = bytes.fromhex((Path(__file__).resolve().parent / "data/sugarchain_block_1.hex").read_text())
+        block_fixture = source_dir / "test/functional/data/sugarchain_block_1.hex"
+        raw_block = bytes.fromhex(block_fixture.read_text())
         block = CBlock()
         block.deserialize(BytesIO(raw_block))
         assert_equal(CBlockHeader(block).serialize(), headers[0].serialize())

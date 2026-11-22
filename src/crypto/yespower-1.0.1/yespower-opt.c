@@ -56,7 +56,7 @@
 #elif defined(__SSE2__)
 #pragma message("Note: AVX and XOP are not enabled.  That's OK.")
 #elif defined(__x86_64__) || defined(__i386__)
-#warning "SSE2 not enabled.  Expect poor performance."
+#pragma message("Note: SSE2 not enabled.  Expect poor performance.")
 #else
 #pragma message("Note: building generic code for non-x86.  That's OK.")
 #endif
@@ -1129,8 +1129,13 @@ fail:
 int yespower_tls(const uint8_t *src, size_t srclen,
     const yespower_params_t *params, yespower_binary_t *dst)
 {
+#if defined(_MSC_VER) && !defined(__clang__)
+	static __declspec(thread) int initialized = 0;
+	static __declspec(thread) yespower_local_t local;
+#else
 	static __thread int initialized = 0;
 	static __thread yespower_local_t local;
+#endif
 
 	if (!initialized) {
 		init_region(&local);

@@ -12,6 +12,7 @@ class PaymentIpcTests : public QObject
     Q_OBJECT
 private Q_SLOTS:
     void namesAreScoped();
+    void preferEnOnce_data();
     void preferEnOnce();
     void legacyFallbackOnce();
     void noListener();

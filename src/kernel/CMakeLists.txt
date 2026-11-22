@@ -117,6 +117,8 @@ add_dependencies(libbitcoinkernel bitcoinkernel)
 get_target_property(bitcoinkernel_type bitcoinkernel TYPE)
 if(bitcoinkernel_type STREQUAL "STATIC_LIBRARY")
   target_compile_definitions(bitcoinkernel PUBLIC BITCOINKERNEL_STATIC)
+elseif(WIN32)
+  target_compile_definitions(bitcoinkernel PRIVATE SUGARCHAIN_WINDOWS_KERNEL_DLL)
 endif()
 
 configure_file(${PROJECT_SOURCE_DIR}/libbitcoinkernel.pc.in ${PROJECT_BINARY_DIR}/libbitcoinkernel.pc @ONLY)

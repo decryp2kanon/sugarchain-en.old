@@ -30,6 +30,12 @@
 #ifndef _YESPOWER_H_
 #define _YESPOWER_H_
 
+/* Keep upstream indentation without relaxing diagnostics in callers. */
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 15
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wleading-whitespace="
+#endif
+
 #include <stdint.h>
 #include <stdlib.h> /* for size_t */
 
@@ -125,6 +131,10 @@ extern int yespower_tls(const uint8_t *src, size_t srclen,
 
 #ifdef __cplusplus
 }
+#endif
+
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 15
+#pragma GCC diagnostic pop
 #endif
 
 #endif /* !_YESPOWER_H_ */

@@ -5,6 +5,7 @@
 #include <qt/bitcoin.h>
 
 #include <compat/compat.h>
+#include <logging.h>
 #include <util/translation.h>
 
 #include <QCoreApplication>
@@ -21,5 +22,7 @@ const std::function<std::string()> G_TEST_GET_FULL_NAME{};
 
 MAIN_FUNCTION
 {
-    return GuiMain(argc, argv);
+    const int result{GuiMain(argc, argv)};
+    LogDebug(BCLog::QT, "GUI: GuiMain returned\n");
+    return result;
 }

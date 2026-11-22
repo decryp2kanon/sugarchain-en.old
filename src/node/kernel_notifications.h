@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <string>
 
 class ArgsManager;
 class CBlockIndex;
@@ -52,6 +53,7 @@ public:
     void headerTip(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) override;
 
     void progress(const bilingual_str& title, int progress_percent, bool resume_possible) override;
+    void startupMessage(const std::string& message, bool log) override;
 
     void warningSet(kernel::Warning id, const bilingual_str& message) override;
 

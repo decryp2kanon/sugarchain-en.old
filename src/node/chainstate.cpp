@@ -3,7 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <node/chainstate.h>
-#include <node/interface_ui.h>
+#include <kernel/notifications_interface.h>
 
 #include <arith_uint256.h>
 #include <chain.h>
@@ -85,7 +85,7 @@ static ChainstateLoadResult CompleteChainstateInitialization(
     // block tree into BlockIndex()!
 
     for (const auto& chainstate : chainman.m_chainstates) {
-        uiInterface.InitMessage("Initializing chainstate...");
+        chainman.GetNotifications().startupMessage("Initializing chainstate...", true);
         LogInfo("Initializing chainstate %s", chainstate->ToString());
 
         try {

@@ -5086,13 +5086,13 @@ bool ChainstateManager::LoadBlockIndex()
 
         if (!m_blockman.m_opts.startup_optimizations) {
             vSortedByHeight = m_blockman.GetAllBlockIndices("Preparing block headers");
-            node::StartupProgress sorting{"Sorting block headers", vSortedByHeight.size(), false};
+            node::StartupProgress sorting{GetNotifications(), "Sorting block headers", vSortedByHeight.size(), false};
             std::sort(vSortedByHeight.begin(), vSortedByHeight.end(), node::CBlockIndexHeightOnlyComparator());
             sorting.FinishSort();
         }
         // In fast mode cs_main is held throughout. Pruned-file cleanup changes only files,
         // so reuse the height ordering already built for index linking.
-        node::StartupProgress selecting{"Selecting best block header", vSortedByHeight.size()};
+        node::StartupProgress selecting{GetNotifications(), "Selecting best block header", vSortedByHeight.size()};
         for (size_t position = 0; position < vSortedByHeight.size(); ++position) {
 #if defined(__GNUC__) || defined(__clang__)
             constexpr size_t PREFETCH_DISTANCE{8};

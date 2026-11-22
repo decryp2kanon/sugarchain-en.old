@@ -6,6 +6,7 @@
 #define BITCOIN_KERNEL_NOTIFICATIONS_INTERFACE_H
 
 #include <cstdint>
+#include <string>
 #include <variant>
 
 class CBlockIndex;
@@ -40,6 +41,8 @@ public:
     [[nodiscard]] virtual InterruptResult blockTip(SynchronizationState state, const CBlockIndex& index, double verification_progress) { return {}; }
     virtual void headerTip(SynchronizationState state, int64_t height, int64_t timestamp, bool presync) {}
     virtual void progress(const bilingual_str& title, int progress_percent, bool resume_possible) {}
+    //! Startup work notifications; applications choose whether to display and log them.
+    virtual void startupMessage(const std::string& message, bool log) {}
     virtual void warningSet(Warning id, const bilingual_str& message) {}
     virtual void warningUnset(Warning id) {}
 

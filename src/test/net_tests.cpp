@@ -28,6 +28,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <ios>
 #include <memory>
@@ -59,7 +60,13 @@ BOOST_AUTO_TEST_CASE(message_batches_bound_work_and_respect_termination)
         {
             interrupt = &stop;
             ++calls[node.GetId()];
-            if (mode == Mode::SLOW) std::this_thread::sleep_for(2ms);
+            if (mode == Mode::SLOW) {
+                // Measure the delay with the same steady clock as the message handler.
+                const auto until{std::chrono::steady_clock::now() + 2ms};
+                while (std::chrono::steady_clock::now() < until) {
+                    std::this_thread::sleep_until(until);
+                }
+            }
             if (mode == Mode::PAUSED) node.fPauseSend = true;
             if (mode == Mode::DISCONNECTED) node.fDisconnect = true;
             if (mode == Mode::INTERRUPTED) stop = true;

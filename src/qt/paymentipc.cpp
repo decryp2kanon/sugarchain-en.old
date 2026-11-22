@@ -14,6 +14,12 @@
 
 namespace {
 constexpr int CONNECT_TIMEOUT{1000};
+#ifdef Q_OS_WIN
+// Qt checks the read side of the named pipe while waiting for a pending write.
+constexpr auto CLIENT_MODE{QIODevice::ReadWrite};
+#else
+constexpr auto CLIENT_MODE{QIODevice::WriteOnly};
+#endif
 
 bool AbsentListener(QLocalSocket::LocalSocketError error)
 {
@@ -37,7 +43,7 @@ PaymentIpcResult SendPaymentIpc(const QStringList& server_names, const QSet<QStr
         bool connected{false};
         for (const auto& request : requests) {
             QLocalSocket socket;
-            socket.connectToServer(name, QIODevice::WriteOnly);
+            socket.connectToServer(name, CLIENT_MODE);
             if (!socket.waitForConnected(CONNECT_TIMEOUT)) {
                 if (!connected && AbsentListener(socket.error())) break;
                 error = QStringLiteral("Cannot deliver the payment request to the running wallet. "

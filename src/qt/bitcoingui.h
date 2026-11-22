@@ -10,6 +10,7 @@
 #include <qt/bitcoinunits.h>
 #include <qt/clientmodel.h>
 #include <qt/guiutil.h>
+#include <qt/networkstyle.h>
 #include <qt/optionsdialog.h>
 
 #include <consensus/amount.h>
@@ -27,7 +28,6 @@
 
 #include <memory>
 
-class NetworkStyle;
 class Notificator;
 class OptionsModel;
 class PlatformStyle;
@@ -185,7 +185,7 @@ private:
     int spinnerFrame = 0;
 
     const PlatformStyle *platformStyle;
-    const NetworkStyle* const m_network_style;
+    const NetworkStyle m_network_style;
 
     /** Create the main UI actions. */
     void createActions();

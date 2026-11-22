@@ -13,13 +13,11 @@ bytes and the pooled hash-map node 192 bytes. Preserving all fields, types
 and their alignment leaves no smaller CBlockIndex obtainable by reordering
 alone; no field, genuine proof flag or serialization was changed.
 
-The dirty container remains a standard ordered unique set. Its polymorphic
-allocator forwards to the existing PoolResource<64, 8>, using small-node
-pooling rather than a separate heap allocation for each entry. The adapter
-resource remains at a stable address. After all set nodes are erased during
-WriteBlockIndexDB, its owned pool is released and recreated lazily on the
-next allocation. Destroy the set before its resource. Calls remain protected
-by the existing main lock. Node sizes/alignments not served by the pool use
+The dirty container uses an ordered unique set with `PoolAllocator` backed
+by `PoolResource<64, 8>`. The first dirty index creates the storage. After
+`WriteBlockIndexDB` collects the pointers, it destroys the set and then its
+pool. This also releases container-owned nodes, including the sentinel used
+by the Windows standard library. The existing main lock protects access. Node sizes/alignments not served by the pool use
 its existing safe fallback. No new index storage or DB record format is used. The first allocation reserves
 a 256 KiB pool chunk; small dirty sets may have extra unused capacity.
 

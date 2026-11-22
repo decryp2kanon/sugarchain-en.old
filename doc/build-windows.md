@@ -80,3 +80,41 @@ You can also create an installer using:
 ```shell
 cmake --build build --target deploy
 ```
+
+The installer contains the seven production programs: `sugarchain`,
+`sugarchain-qt`, `sugarchaind`, `sugarchain-cli`, `sugarchain-wallet`,
+`sugarchain-tx`, and `sugarchain-util`. Building it does not require enabling
+unit tests. It does not package test or benchmark executables, or create
+shortcuts for unsupported public test networks.
+
+## Native Windows validation
+
+Cross-compilation does not establish Windows runtime compatibility. The CI
+Windows runners execute both MinGW CRT variants after cross-compilation and
+also run the Visual Studio build. Keep the unit, Qt, functional, and fuzz
+checks enabled; compilation alone is insufficient.
+
+The production smoke check accepts a flat binary archive, a build output
+directory, or the installed root directory:
+
+```powershell
+py -3 .github/ci-windows-smoke.py --bindir build/bin/Release --work-dir "$env:RUNNER_TEMP/en-runtime"
+```
+
+It starts isolated offline mainnet and regtest daemons and a mainnet GUI,
+checks the native genesis and address formats, signs and verifies a message,
+confirms a regtest transfer, and backs up and restores a newly created wallet.
+It also checks that unsupported networks reject startup without creating
+persistent data. GUI checks use the native Windows platform plugin through
+`QT_QPA_PLATFORM`; `-platform` is not a supported application argument.
+
+On an ephemeral Windows GitHub Actions runner, the installer check exercises
+silent installation, in-place upgrade, the installed programs, and uninstall:
+
+```powershell
+py -3 .github/ci-windows-installer.py --installer ./Sugarchain-En-31.1.0-win64-setup.exe --work-dir "$env:RUNNER_TEMP/en-installer"
+```
+
+The work directory must not already exist. The check refuses to overwrite an
+existing registered installation and verifies configuration and additional
+user-file preservation. It does not use production wallets or chain data.

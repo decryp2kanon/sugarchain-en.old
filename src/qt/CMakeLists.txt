@@ -299,6 +299,18 @@ endif()
 
 if(WIN32)
   set_target_properties(bitcoin-qt PROPERTIES WIN32_EXECUTABLE TRUE)
+  if(qt_lib_type STREQUAL "SHARED_LIBRARY")
+    # Qt discovers the platform plugin at runtime, outside the executable's DLL imports.
+    add_custom_command(TARGET bitcoin-qt POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:bitcoin-qt>/platforms"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>" "$<TARGET_FILE_DIR:bitcoin-qt>/platforms"
+      VERBATIM
+    )
+    install(FILES "$<TARGET_FILE:Qt6::QWindowsIntegrationPlugin>"
+      DESTINATION ${CMAKE_INSTALL_BINDIR}/platforms
+      COMPONENT bitcoin-qt
+    )
+  endif()
 endif()
 
 if(ENABLE_IPC)

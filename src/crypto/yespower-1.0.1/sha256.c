@@ -45,6 +45,13 @@
 #define restrict
 #endif
 
+/* MSVC does not implement C99 array-parameter minimum-size qualifiers. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#define SHA256_ARRAY_MIN(n) n
+#else
+#define SHA256_ARRAY_MIN(n) static restrict n
+#endif
+
 /*
  * Encode a length len*2 vector of (uint32_t) into a length len*8 vector of
  * (uint8_t) in big-endian form.
@@ -132,9 +139,9 @@ static const uint32_t Krnd[64] = {
  * the 512-bit input block to produce a new state.
  */
 static void
-SHA256_Transform(uint32_t state[static restrict 8],
-    const uint8_t block[static restrict 64],
-    uint32_t W[static restrict 64], uint32_t S[static restrict 8])
+SHA256_Transform(uint32_t state[SHA256_ARRAY_MIN(8)],
+    const uint8_t block[SHA256_ARRAY_MIN(64)],
+    uint32_t W[SHA256_ARRAY_MIN(64)], uint32_t S[SHA256_ARRAY_MIN(8)])
 {
 	int i;
 
@@ -203,7 +210,7 @@ static const uint8_t PAD[64] = {
 
 /* Add padding and terminating bit-count. */
 static void
-SHA256_Pad(SHA256_CTX * ctx, uint32_t tmp32[static restrict 72])
+SHA256_Pad(SHA256_CTX * ctx, uint32_t tmp32[SHA256_ARRAY_MIN(72)])
 {
 	size_t r;
 
@@ -257,7 +264,7 @@ SHA256_Init(SHA256_CTX * ctx)
  */
 static void
 _SHA256_Update(SHA256_CTX * ctx, const void * in, size_t len,
-    uint32_t tmp32[static restrict 72])
+    uint32_t tmp32[SHA256_ARRAY_MIN(72)])
 {
 	uint32_t r;
 	const uint8_t * src = in;
@@ -315,7 +322,7 @@ SHA256_Update(SHA256_CTX * ctx, const void * in, size_t len)
  */
 static void
 _SHA256_Final(uint8_t digest[32], SHA256_CTX * ctx,
-    uint32_t tmp32[static restrict 72])
+    uint32_t tmp32[SHA256_ARRAY_MIN(72)])
 {
 
 	/* Add padding. */
@@ -367,8 +374,8 @@ SHA256_Buf(const void * in, size_t len, uint8_t digest[32])
  */
 static void
 _HMAC_SHA256_Init(HMAC_SHA256_CTX * ctx, const void * _K, size_t Klen,
-    uint32_t tmp32[static restrict 72], uint8_t pad[static restrict 64],
-    uint8_t khash[static restrict 32])
+    uint32_t tmp32[SHA256_ARRAY_MIN(72)], uint8_t pad[SHA256_ARRAY_MIN(64)],
+    uint8_t khash[SHA256_ARRAY_MIN(32)])
 {
 	const uint8_t * K = _K;
 	size_t i;
@@ -420,7 +427,7 @@ HMAC_SHA256_Init(HMAC_SHA256_CTX * ctx, const void * _K, size_t Klen)
  */
 static void
 _HMAC_SHA256_Update(HMAC_SHA256_CTX * ctx, const void * in, size_t len,
-    uint32_t tmp32[static restrict 72])
+    uint32_t tmp32[SHA256_ARRAY_MIN(72)])
 {
 
 	/* Feed data to the inner SHA256 operation. */
@@ -447,7 +454,7 @@ HMAC_SHA256_Update(HMAC_SHA256_CTX * ctx, const void * in, size_t len)
  */
 static void
 _HMAC_SHA256_Final(uint8_t digest[32], HMAC_SHA256_CTX * ctx,
-    uint32_t tmp32[static restrict 72], uint8_t ihash[static restrict 32])
+    uint32_t tmp32[SHA256_ARRAY_MIN(72)], uint8_t ihash[SHA256_ARRAY_MIN(32)])
 {
 
 	/* Finish the inner SHA256 operation. */
@@ -500,8 +507,8 @@ HMAC_SHA256_Buf(const void * K, size_t Klen, const void * in, size_t len,
 
 /* Add padding and terminating bit-count, but don't invoke Transform yet. */
 static int
-SHA256_Pad_Almost(SHA256_CTX * ctx, uint8_t len[static restrict 8],
-    uint32_t tmp32[static restrict 72])
+SHA256_Pad_Almost(SHA256_CTX * ctx, uint8_t len[SHA256_ARRAY_MIN(8)],
+    uint32_t tmp32[SHA256_ARRAY_MIN(72)])
 {
 	uint32_t r;
 

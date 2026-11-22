@@ -1,0 +1,86 @@
+Keep the Windows local server's pending accept requests alive until cancellation
+completes. Qt 6.8.3 shares a manual-reset event across its listening pipe handles.
+Check each request before releasing its handle and storage, including when only
+part of the listen backlog was created.
+
+--- a/qtbase/src/network/socket/qlocalserver_win.cpp
++++ b/qtbase/src/network/socket/qlocalserver_win.cpp
+@@ -25,9 +25,6 @@
+ {
+     // The object must not change its address once the
+     // contained OVERLAPPED struct is passed to Windows.
+-    listeners.push_back(std::make_unique<Listener>());
+-    auto &listener = listeners.back();
+-
+     SECURITY_ATTRIBUTES sa;
+     sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+     sa.bInheritHandle = FALSE;      //non inheritable handle, same as default
+@@ -138,6 +135,8 @@
+         sa.lpSecurityDescriptor = pSD.data();
+     }
+
++    listeners.push_back(std::make_unique<Listener>());
++    auto &listener = listeners.back();
+     listener->handle = CreateNamedPipe(
+                  reinterpret_cast<const wchar_t *>(fullServerName.utf16()), // pipe name
+                  PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,       // read/write access
+@@ -179,7 +178,7 @@
+             return false;
+         }
+     } else {
+-        Q_ASSERT_X(false, "QLocalServerPrivate::addListener", "The impossible happened");
++        listener->connected = true;
+         SetEvent(eventHandle);
+     }
+     return true;
+@@ -216,12 +215,18 @@
+     // The idea is that listener events are rare, so polling all listeners once in a while is
+     // cheap compared to waiting for N additional events in each iteration of the main loop.
+     eventHandle = CreateEvent(NULL, TRUE, FALSE, NULL);
++    if (!eventHandle) {
++        setError("QLocalServerPrivate::listen"_L1);
++        return false;
++    }
+     connectionEventNotifier = new QWinEventNotifier(eventHandle , q);
+     q->connect(connectionEventNotifier, SIGNAL(activated(HANDLE)), q, SLOT(_q_onNewConnection()));
+
+     for (int i = 0; i < listenBacklog; ++i)
+-        if (!addListener())
+-            return false;
++        if (!addListener()) {
++            closeServer();
++            return false;
++        }
+
+     _q_onNewConnection();
+     return true;
+@@ -281,10 +286,26 @@
+     connectionEventNotifier->setEnabled(false); // Otherwise, closed handle is checked before deleter runs
+     connectionEventNotifier->deleteLater();
+     connectionEventNotifier = 0;
++    for (const auto &listener : listeners) {
++        if (!listener->connected)
++            CancelIoEx(listener->handle, &listener->overlapped);
++    }
++    for (const auto &listener : listeners) {
++        // All accepts share one event. Check the individual request after each wakeup.
++        while (!listener->connected) {
++            ResetEvent(eventHandle);
++            DWORD bytes;
++            if (GetOverlappedResult(listener->handle, &listener->overlapped, &bytes, FALSE)
++                || GetLastError() != ERROR_IO_INCOMPLETE) {
++                break;
++            }
++            WaitForSingleObject(eventHandle, INFINITE);
++        }
++        CloseHandle(listener->handle);
++    }
++    listeners.clear();
+     CloseHandle(eventHandle);
+-    for (size_t i = 0; i < listeners.size(); ++i)
+-        CloseHandle(listeners[i]->handle);
+-    listeners.clear();
++    eventHandle = nullptr;
+ }
+
+ void QLocalServerPrivate::waitForNewConnection(int msecs, bool *timedOut)

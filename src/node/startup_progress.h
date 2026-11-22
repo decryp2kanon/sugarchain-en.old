@@ -5,7 +5,7 @@
 #ifndef BITCOIN_NODE_STARTUP_PROGRESS_H
 #define BITCOIN_NODE_STARTUP_PROGRESS_H
 
-#include <node/interface_ui.h>
+#include <kernel/notifications_interface.h>
 #include <tinyformat.h>
 #include <cstdint>
 #include <string>
@@ -15,6 +15,7 @@ namespace node {
  * Sorting has no measurable percent progress. */
 class StartupProgress
 {
+    kernel::Notifications& m_notifications;
     const std::string m_stage;
     const uint64_t m_total;
     uint64_t m_processed{0};
@@ -33,10 +34,11 @@ class StartupProgress
         return result;
     }
 public:
-    StartupProgress(const std::string& stage, uint64_t total, bool measurable = true) : m_stage{stage}, m_total{total}
+    StartupProgress(kernel::Notifications& notifications, const std::string& stage, uint64_t total, bool measurable = true)
+        : m_notifications{notifications}, m_stage{stage}, m_total{total}
     {
         if (measurable) Report(0);
-        else uiInterface.InitMessage(m_stage + "...");
+        else m_notifications.startupMessage(m_stage + "...", true);
     }
     void Advance()
     {
@@ -52,7 +54,7 @@ public:
     {
         const bool log{percent >= m_next_log_percent};
         while (percent >= m_next_log_percent) m_next_log_percent += 25;
-        uiInterface.InitMessage(strprintf("%s: %s / %s (%u%%)",
+        m_notifications.startupMessage(strprintf("%s: %s / %s (%u%%)",
             m_stage, Group(m_processed), Group(m_total), percent), log);
     }
     /** Only call after successful completion; interrupted/failed work must never report 100%. */
@@ -63,7 +65,7 @@ public:
     /** Sorting is opaque: publish only start and finish, never a fabricated percentage. */
     void FinishSort() const
     {
-        uiInterface.InitMessage(m_stage + " completed.");
+        m_notifications.startupMessage(m_stage + " completed.", true);
     }
 };
 } // namespace node

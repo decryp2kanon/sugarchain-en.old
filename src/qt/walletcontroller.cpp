@@ -50,6 +50,7 @@ WalletController::WalletController(ClientModel& client_model, const PlatformStyl
     });
 
     m_activity_worker->moveToThread(m_activity_thread);
+    connect(m_activity_thread, &QThread::finished, m_activity_worker, &QObject::deleteLater);
     m_activity_thread->start();
     QTimer::singleShot(0, m_activity_worker, []() {
         util::ThreadRename("qt-walletctrl");
@@ -62,7 +63,6 @@ WalletController::~WalletController()
 {
     m_activity_thread->quit();
     m_activity_thread->wait();
-    delete m_activity_worker;
 }
 
 std::map<std::string, std::pair<bool, std::string>> WalletController::listWalletDir() const

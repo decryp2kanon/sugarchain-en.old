@@ -97,7 +97,7 @@ Section -Main SEC0000
     File @abs_top_builddir@/release/@BITCOIN_CLI_NAME@@EXEEXT@
     File @abs_top_builddir@/release/@BITCOIN_TX_NAME@@EXEEXT@
     File @abs_top_builddir@/release/@BITCOIN_WALLET_TOOL_NAME@@EXEEXT@
-    File @abs_top_builddir@/release/@BITCOIN_TEST_NAME@@EXEEXT@
+    File @abs_top_builddir@/release/@BITCOIN_UTIL_NAME@@EXEEXT@
     SetOutPath $INSTDIR
     WriteRegStr HKCU "${REGKEY}\Components" Main 1
 SectionEnd
@@ -108,14 +108,15 @@ Section -post SEC0001
     ClearErrors
     WriteUninstaller $INSTDIR\uninstall.exe
     IfErrors 0 +3
-        MessageBox MB_OK|MB_ICONSTOP "Could not write the Sugarchain En uninstaller. Existing registration has been retained."
+        MessageBox MB_OK|MB_ICONSTOP "Could not write the Sugarchain En uninstaller. Existing registration has been retained." /SD IDOK
         Abort
     !insertmacro MUI_STARTMENU_WRITE_BEGIN Application
     CreateDirectory $SMPROGRAMS\$StartMenuGroup
     CreateShortcut "$SMPROGRAMS\$StartMenuGroup\$(^Name).lnk" $INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@
-    CreateShortcut "$SMPROGRAMS\$StartMenuGroup\@CLIENT_NAME@ (testnet).lnk" "$INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@" "-testnet" "$INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@" 1
-    CreateShortcut "$SMPROGRAMS\$StartMenuGroup\@CLIENT_NAME@ (test signet).lnk" "$INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@" "-signet" "$INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@" 2
-    CreateShortcut "$SMPROGRAMS\$StartMenuGroup\@CLIENT_NAME@ (testnet4).lnk" "$INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@" "-testnet4" "$INSTDIR\@BITCOIN_GUI_NAME@@EXEEXT@" 3
+    # Remove launchers from older En installations for unsupported chains.
+    Delete "$SMPROGRAMS\$StartMenuGroup\@CLIENT_NAME@ (testnet).lnk"
+    Delete "$SMPROGRAMS\$StartMenuGroup\@CLIENT_NAME@ (test signet).lnk"
+    Delete "$SMPROGRAMS\$StartMenuGroup\@CLIENT_NAME@ (testnet4).lnk"
     CreateShortcut "$SMPROGRAMS\$StartMenuGroup\Uninstall $(^Name).lnk" $INSTDIR\uninstall.exe
     !insertmacro MUI_STARTMENU_WRITE_END
     WriteRegStr HKCU "${UNINSTALL_REGKEY}" DisplayName "$(^Name)"
@@ -184,7 +185,7 @@ Section /o -un.Main UNSEC0000
     Delete /REBOOTOK $INSTDIR\daemon\@BITCOIN_CLI_NAME@@EXEEXT@
     Delete /REBOOTOK $INSTDIR\daemon\@BITCOIN_TX_NAME@@EXEEXT@
     Delete /REBOOTOK $INSTDIR\daemon\@BITCOIN_WALLET_TOOL_NAME@@EXEEXT@
-    Delete /REBOOTOK $INSTDIR\daemon\@BITCOIN_TEST_NAME@@EXEEXT@
+    Delete /REBOOTOK $INSTDIR\daemon\@BITCOIN_UTIL_NAME@@EXEEXT@
     RMDir /REBOOTOK $INSTDIR\daemon
     DeleteRegValue HKCU "${REGKEY}\Components" Main
 SectionEnd
@@ -222,7 +223,7 @@ Function .onInit
       ; disable registry redirection (enable access to 64-bit portion of registry)
       SetRegView 64
     ${Else}
-      MessageBox MB_OK|MB_ICONSTOP "Cannot install 64-bit version on a 32-bit system."
+      MessageBox MB_OK|MB_ICONSTOP "Cannot install 64-bit version on a 32-bit system." /SD IDOK
       Abort
     ${EndIf}
     # InstallDirRegKey is evaluated before the explicit 64-bit registry view.
@@ -240,9 +241,10 @@ Function .onInit
     ${EndIf}
     ${If} $LegacyInstallDir != ""
         GetFullPathName $LegacyInstallDir $LegacyInstallDir
+        StrCmp $LegacyInstallDir "" invalid_legacy
         ${If} $R1 != ""
         ${AndIf} $R1 != $LegacyInstallDir
-            MessageBox MB_OK|MB_ICONSTOP "Separate Sugarchain En and Komorebi installations are registered. Uninstall the old product normally before upgrading En. No files have been changed."
+            MessageBox MB_OK|MB_ICONSTOP "Separate Sugarchain En and Komorebi installations are registered. Uninstall the old product normally before upgrading En. No files have been changed." /SD IDOK
             Abort
         ${EndIf}
         IfFileExists "$LegacyInstallDir\uninstall.exe" 0 invalid_legacy
@@ -258,16 +260,23 @@ Function .onInit
     ${EndIf}
     Goto done
 invalid_legacy:
-    MessageBox MB_OK|MB_ICONSTOP "The registered Sugarchain Komorebi installation is incomplete. Repair or uninstall it normally before installing Sugarchain En. No files have been changed."
+    MessageBox MB_OK|MB_ICONSTOP "The registered Sugarchain Komorebi installation is incomplete. Repair or uninstall it normally before installing Sugarchain En. No files have been changed." /SD IDOK
     Abort
 done:
 FunctionEnd
 
 Function CheckInstallDirectory
-    GetFullPathName $INSTDIR $INSTDIR
+    # GetFullPathName returns an empty string for a directory that does not
+    # exist yet. SetOutPath will create it on a fresh install.
+    GetFullPathName $0 $INSTDIR
+    ${If} $0 != ""
+        StrCpy $INSTDIR $0
+    ${Else}
+        ClearErrors
+    ${EndIf}
     ${If} $LegacyInstallDir != ""
-    ${AndIf} $LegacyInstallDir != $INSTDIR
-        MessageBox MB_OK|MB_ICONSTOP "Upgrade Sugarchain Komorebi in its existing folder, or uninstall it normally before selecting a new folder."
+    ${AndIf} $LegacyInstallDir != $0
+        MessageBox MB_OK|MB_ICONSTOP "Upgrade Sugarchain Komorebi in its existing folder, or uninstall it normally before selecting a new folder." /SD IDOK
         Abort
     ${EndIf}
 FunctionEnd
@@ -278,7 +287,7 @@ Function un.onInit
     # Bind the uninstaller to its own installation, not a stale registry path.
     ReadRegStr $R0 HKCU "${REGKEY}" Path
     ${If} $R0 != $INSTDIR
-        MessageBox MB_OK|MB_ICONSTOP "This uninstaller no longer matches the registered Sugarchain En installation. No files have been removed."
+        MessageBox MB_OK|MB_ICONSTOP "This uninstaller no longer matches the registered Sugarchain En installation. No files have been removed." /SD IDOK
         Abort
     ${EndIf}
     !insertmacro MUI_STARTMENU_GETFOLDER Application $StartMenuGroup

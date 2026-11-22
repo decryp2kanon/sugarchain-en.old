@@ -86,6 +86,18 @@ ctest --test-dir build --build-config Release  # Append "-j N" for N parallel te
 cmake --install build --config Release         # Optional.
 ```
 
+Run the production startup and wallet smoke check on the Windows host as well:
+
+```powershell
+py -3 .github/ci-windows-smoke.py --bindir build/bin/Release --work-dir ./windows-runtime-check
+```
+
+This uses fresh offline data directories, checks the mainnet GUI and both
+supported chain modes, and exercises native wallet addresses and a confirmed
+regtest transfer. See [Native Windows validation](build-windows.md#native-windows-validation)
+for installer coverage. The NSIS `deploy` target is provided by the MinGW
+cross-build; the Visual Studio build is validated separately.
+
 ### Building with Dynamic Linking without GUI
 
 ```powershell

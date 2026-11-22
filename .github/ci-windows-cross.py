@@ -30,7 +30,7 @@ def print_version():
 
 def check_manifests():
     release_dir = Path.cwd() / "bin"
-    manifest_path = release_dir / "bitcoind.manifest"
+    manifest_path = release_dir / "sugarchaind.manifest"
 
     cmd_bitcoind_manifest = [
         "mt.exe",
@@ -43,7 +43,6 @@ def check_manifests():
 
     skipped = {  # Skip as they currently do not have manifests
         "fuzz.exe",
-        "bench_bitcoin.exe",
     }
     for entry in release_dir.iterdir():
         if entry.suffix.lower() != ".exe":
@@ -125,8 +124,9 @@ def run_unit_tests():
     workspace = Path.cwd()
     os.environ["DIR_UNIT_TEST_DATA"] = str(workspace / "unit_test_data")
     # Can't use ctest here like other jobs as we don't have a CMake build tree.
+    # Qt Test sends output to the Windows debugger when CI redirects the console.
+    run(["./bin/test_bitcoin-qt.exe"], env={**os.environ, "QT_FORCE_STDERR_LOGGING": "1"})
     commands = [
-        ["./bin/test_bitcoin-qt.exe"],
         # Intentionally run sequentially here, to catch test case failures caused by dirty global state from prior test cases:
         ["./bin/test_bitcoin.exe", "-l", "test_suite"],
         ["./src/secp256k1/bin/exhaustive_tests.exe"],

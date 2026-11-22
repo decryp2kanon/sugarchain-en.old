@@ -17,9 +17,10 @@
 #include <QThread>
 
 InitExecutor::InitExecutor(interfaces::Node& node)
-    : QObject(), m_node(node)
+    : QObject(), m_node(node), m_context(new QObject)
 {
-    m_context.moveToThread(&m_thread);
+    m_context->moveToThread(&m_thread);
+    connect(&m_thread, &QThread::finished, m_context, &QObject::deleteLater);
     m_thread.start();
 }
 
@@ -39,7 +40,7 @@ void InitExecutor::handleRunawayException(const std::exception* e)
 
 void InitExecutor::initialize()
 {
-    QMetaObject::invokeMethod(&m_context, [this] {
+    QMetaObject::invokeMethod(m_context, [this] {
         try {
             util::ThreadRename("qt-init");
             qDebug() << "Running initialization in thread";
@@ -56,7 +57,7 @@ void InitExecutor::initialize()
 
 void InitExecutor::shutdown()
 {
-    QMetaObject::invokeMethod(&m_context, [this] {
+    QMetaObject::invokeMethod(m_context, [this] {
         try {
             qDebug() << "Running Shutdown in thread";
             m_node.appShutdown();
