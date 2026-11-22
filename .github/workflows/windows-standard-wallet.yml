@@ -1,4 +1,4 @@
-name: Windows package wallet check
+name: Windows package saved wallet check
 on:
   push:
     branches: [qa/windows-standard-wallet-report-20261121]
@@ -13,7 +13,7 @@ defaults:
 
 jobs:
   windows:
-    name: Windows, msvcrt, published raw and installed wallet exit
+    name: Windows, msvcrt, saved wallet restart
     runs-on: windows-2022
     timeout-minutes: 25
     env:
@@ -24,7 +24,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Verify the published archive and the acceptance scripts
+      - name: Verify the published archive and wallet restart test scripts
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -35,8 +35,8 @@ jobs:
             throw "Unexpected published package"
           }
           $scripts = @{
-            '.github/ci-windows-smoke.py' = '4548497086d5b0a73f4119839bb595d2e3c5859b'
-            '.github/ci-windows-installer.py' = '1fb49e31a506b5d782300528cc82be1871395d3f'
+            '.github/ci-windows-smoke.py' = '3548586bc6895c3856d68a767b9a24736c764568'
+            '.github/ci-windows-installer.py' = '56ce1ef9c698bc02aa41e16a7b020813ac78ed6d'
           }
           foreach ($item in $scripts.GetEnumerator()) {
             if ((git rev-parse "HEAD:$($item.Key)") -ne $item.Value) { throw "Acceptance source changed" }
@@ -87,19 +87,19 @@ jobs:
           py -3 .github/ci-windows-cross.py check_manifests
           py -3 .github/ci-windows-cross.py prepare_tests
 
-      - name: Run native daemon and wallet acceptance
+      - name: Create and reopen a Korean-named wallet with the published GUI
         id: raw
         shell: bash
         run: |
           date -u +%s > "$RUNNER_TEMP/en-wallet-qualification-start"
-          py -3 .github/ci-windows-normal-report.py .github/ci-windows-smoke.py --bindir bin --work-dir "${RUNNER_TEMP}/en-cross-smoke-msvcrt"
+          py -3 .github/ci-windows-normal-report.py .github/ci-windows-smoke.py --verify-wallet-restart --bindir bin --work-dir "${RUNNER_TEMP}/en-saved-wallet-msvcrt"
 
-      - name: Verify fresh install, upgrade, wallet shutdown and uninstall
+      - name: Check saved wallet restart after installation and upgrade, then verify uninstall
         id: installed
         shell: bash
         run: |
           date -u +%s > "$RUNNER_TEMP/en-wallet-qualification-start"
-          py -3 .github/ci-windows-normal-report.py .github/ci-windows-installer.py --installer Sugarchain-En-31.1.0-win64-setup.exe --work-dir "${RUNNER_TEMP}/en-installer-msvcrt"
+          py -3 .github/ci-windows-normal-report.py .github/ci-windows-installer.py --with-wallet-restart --installer Sugarchain-En-31.1.0-win64-setup.exe --work-dir "${RUNNER_TEMP}/en-installer-msvcrt"
 
       - name: Read the local exception location
         if: ${{ failure() && (steps.raw.outcome == 'failure' || steps.installed.outcome == 'failure') }}
