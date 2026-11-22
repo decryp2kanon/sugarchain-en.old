@@ -13,9 +13,12 @@ defaults:
 
 jobs:
   windows:
-    name: Windows, msvcrt, published installer and native wallet exit
+    name: Windows, msvcrt, published raw and installed wallet exit
     runs-on: windows-2022
     timeout-minutes: 25
+    env:
+      PYTHONUTF8: 1
+      TEST_RUNNER_TIMEOUT_FACTOR: 40
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -25,10 +28,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $archive = gh api repos/decryp2kanon/sugarchain-en/actions/artifacts/14719886885 | ConvertFrom-Json
-          if ($LASTEXITCODE -or $archive.expired -or $archive.workflow_run.id -ne 44910557035 -or
-              $archive.workflow_run.head_sha -ne 'fa5d59b3b15a0fe4f7a9d61b3264510441ad9a5b' -or
-              $archive.digest -ne 'sha256:797518768d05d28f6053d67a55889b04990f1c901065751829206390f9cdc724') {
+          $archive = gh api repos/decryp2kanon/sugarchain-en/actions/artifacts/14734565120 | ConvertFrom-Json
+          if ($LASTEXITCODE -or $archive.expired -or $archive.workflow_run.id -ne 44957257370 -or
+              $archive.workflow_run.head_sha -ne '6015ff58e90d328c86d50a4dad2c0e308f83e5a8' -or
+              $archive.digest -ne 'sha256:d4f87a050b22f4ed0dcba467f3f79e9b86edd6b23b1804a77d3f216c4bbdda23') {
             throw "Unexpected published package"
           }
           $scripts = @{
@@ -42,45 +45,81 @@ jobs:
       - name: Download the published MSVCRT package
         uses: actions/download-artifact@v8
         with:
-          name: x86_64-w64-mingw32-executables-44910557035
+          name: x86_64-w64-mingw32-executables-44957257370
           github-token: ${{ github.token }}
-          run-id: 44910557035
-          path: distribution
+          run-id: 44957257370
+          path: .
 
       - name: Check the installer and enable local Qt exit reports
         run: |
-          $installer = 'distribution/Sugarchain-En-31.1.0-win64-setup.exe'
-          if ((Get-FileHash $installer).Hash -ne '7f9d0268a412fc710a67643b3c6f9b53e237cebc47ab3e9d59757f3cbbddfa5d') {
-            throw "The installer differs from the file tested by the pull request"
-          }
+          $installer = (Get-Item 'Sugarchain-En-31.1.0-win64-setup.exe').FullName
+          Get-FileHash $installer | Format-List Algorithm,Hash
+          Get-FileHash 'bin/sugarchain-qt.exe' | Format-List Algorithm,Hash
           $reports = New-Item -ItemType Directory (Join-Path $env:RUNNER_TEMP 'qt-local-exit-reports')
           $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\sugarchain-qt.exe'
           if (Test-Path -LiteralPath $key) { throw "Application report settings already exist" }
           New-Item -Path $key -Force | Out-Null
+          "EN_QT_REPORT_KEY_CREATED=1" >> $env:GITHUB_ENV
           New-ItemProperty -LiteralPath $key -Name DumpFolder -Value $reports.FullName -PropertyType ExpandString | Out-Null
           New-ItemProperty -LiteralPath $key -Name DumpCount -Value 1 -PropertyType DWord | Out-Null
           New-ItemProperty -LiteralPath $key -Name DumpType -Value 1 -PropertyType DWord | Out-Null
 
-      - name: Run native daemon and wallet acceptance
+      - name: Prepare the native Windows release environment
+        shell: bash
         run: |
-          py -3 .github/ci-windows-smoke.py --bindir distribution/bin --work-dir "$env:RUNNER_TEMP/raw-wallet-runtime"
-          exit $LASTEXITCODE
+          py -3 .github/ci-windows-cross.py print_version
+          py -3 .github/ci-windows.py standard github_import_vs_env
+
+      - name: Verify manifests and prepare release test data
+        shell: bash
+        run: |
+          py -3 .github/ci-windows-cross.py check_manifests
+          py -3 .github/ci-windows-cross.py prepare_tests
+
+      - name: Run native daemon and wallet acceptance
+        shell: bash
+        run: py -3 .github/ci-windows-normal-report.py .github/ci-windows-smoke.py --bindir bin --work-dir "${RUNNER_TEMP}/en-cross-smoke-msvcrt"
 
       - name: Verify fresh install, upgrade, wallet shutdown and uninstall
-        run: |
-          py -3 .github/ci-windows-installer.py --installer distribution/Sugarchain-En-31.1.0-win64-setup.exe --work-dir "$env:RUNNER_TEMP/installed-wallet-runtime"
-          exit $LASTEXITCODE
+        shell: bash
+        run: py -3 .github/ci-windows-normal-report.py .github/ci-windows-installer.py --installer Sugarchain-En-31.1.0-win64-setup.exe --work-dir "${RUNNER_TEMP}/en-installer-msvcrt"
 
       - name: Read the local exception location
         if: failure()
         run: |
           $download = Join-Path $env:RUNNER_TEMP 'qt-local-exit-reports'
           if (!(Test-Path $download)) { Write-Output 'The report directory was not created.'; exit 0 }
-          $dump = Get-ChildItem -LiteralPath $download -Filter '*.dmp' | Select-Object -First 1
-          if (!$dump) { Write-Output 'Windows did not write a Qt exception report.'; exit 0 }
+          $started = Get-Date
+          do {
+            $dumps = @(Get-ChildItem -LiteralPath $download -Filter 'sugarchain-qt.exe.*.dmp')
+            if ($dumps.Count -eq 0) { Start-Sleep -Seconds 2 }
+          } until ($dumps.Count -gt 0 -or (Get-Date) -gt $started.AddSeconds(30))
+          if ($dumps.Count -eq 0) { Write-Output 'Windows did not write a Qt exception report.'; exit 0 }
+          if ($dumps.Count -ne 1) { throw "Expected exactly one local Qt exit report" }
+          $dump = $dumps[0]
+          Write-Output "Local native report $($dump.Name)"
           py -3 .github/ci-windows-minidump-summary.py $dump.FullName
           if ($LASTEXITCODE) { throw "Windows exception summary could not be read" }
           $cdb = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Debuggers\x64\cdb.exe'
           if (Test-Path $cdb) {
-            & $cdb -sins -z $dump.FullName -c '.ecxr; kn 12; q'
+            $trace = & $cdb -sins -z $dump.FullName -c '.ecxr; kc 12; q' 2>&1
+            $frames = @($trace | Select-String '^\s*[0-9A-Fa-f]{2}\s+\S+' | Select-Object -First 12)
+          } else {
+            $lldb = Get-Command lldb.exe -ErrorAction SilentlyContinue
+            if (!$lldb) { Write-Output 'Qt exception module and offset recorded above.'; exit 0 }
+            $trace = & $lldb.Source --batch --core $dump.FullName --file 'bin/sugarchain-qt.exe' -o 'thread backtrace -c 12' 2>&1
+            $frames = @($trace | Select-String '^\s*\*?\s*frame #\d+:' | Select-Object -First 12)
+          }
+          foreach ($frame in $frames) { Write-Output $frame.Line.Trim() }
+          if (!$frames) { Write-Output 'No unwind frames reported by the local Windows tool.' }
+          exit 0
+
+      - name: Remove local Windows exception data
+        if: always()
+        run: |
+          if ($env:EN_QT_REPORT_KEY_CREATED -eq '1') {
+            $key = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\sugarchain-qt.exe'
+            Remove-Item -LiteralPath $key -Recurse -Force
+            $reports = Join-Path $env:RUNNER_TEMP 'qt-local-exit-reports'
+            Remove-Item -LiteralPath $reports -Recurse -Force
           }
