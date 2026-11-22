@@ -102,22 +102,26 @@ def frames_from_output(output, modules, initial_pc):
     section, clean_count = None, 0
     unnumbered, symbols, pcs = [], {}, {}
     markers = set()
-    tid = None
+    thread_rows, current_tids = set(), set()
     if initial_pc is not None:
         pcs[0] = initial_pc
     physical = {}
     for row in output.splitlines():
         line = row.strip()
-        if line in (NAME, DETAIL, END):
+        if line in ("QA_SELECTED_THREAD", NAME, DETAIL, END):
             section = line
             markers.add(line)
             continue
         ip = re.fullmatch("QA_CURRENT_IP " + ADDRESS, line)
         if ip:
             pcs[0] = address(ip[1])
-        thread = re.fullmatch(r"QA_CURRENT_TID ([0-9a-fA-F]{1,8})", line)
-        if thread:
-            tid = int(thread[1], 16)
+        if section == "QA_SELECTED_THREAD":
+            thread = re.match(r"^([.#]?)\s*[0-9a-f]+\s+id:\s*[0-9a-f]+\.([0-9a-f]+)\b", line, re.I)
+            if thread:
+                observed = int(thread[2], 16)
+                thread_rows.add(observed)
+                if thread[1] == ".":
+                    current_tids.add(observed)
         if section == NAME:
             m = re.match(r"^(?:#?([0-9a-fA-F]{1,3})\s+)?" + CALL_SITE, line, re.ASCII)
             if m:
@@ -148,6 +152,8 @@ def frames_from_output(output, modules, initial_pc):
         label = symbols.get(i)
         if label or origin:
             frames.append((i, origin, label))
+    observed_tids = current_tids or thread_rows
+    tid = next(iter(observed_tids)) if len(observed_tids) == 1 else None
     return frames[:12], clean_count, len(physical), END in markers, tid
 
 
@@ -164,7 +170,7 @@ def invoke(cdb, cwd, args, timeout=35, command_input=None):
 def read_stack(cdb, dump, image, modules, selector, expected_tid, initial_pc):
     image_paths = str(image.parent) + ";" + str(Path(os.environ["SystemRoot"]) / "System32")
     commands = [selector,
-                '.printf "QA_CURRENT_TID %x\\n", @$tid',
+                ".echo QA_SELECTED_THREAD", "~.",
                 '.printf "QA_CURRENT_IP %p\\n", @rip',
                 f'.echo {NAME}', "kcn 0xc", f'.echo {DETAIL}', "kn 0xc", f'.echo {END}', "q"]
     # Put each command on a separate line. CDB reads its own command switches;
@@ -186,6 +192,8 @@ def read_stack(cdb, dump, image, modules, selector, expected_tid, initial_pc):
         messages = [line.strip() for line in output.splitlines() if re.search(
             r"error|failed|cannot|could not|couldn't|unable|incorrect|syntax|read fault|dump file|debugger version",
             line, re.I)]
+        for number, origin, label in frames[:12]:
+            print(f"Healthy frame {number:02d} " + " ".join(item for item in (origin, label) if item))
         print(f"Healthy debugger output: {len(output)} characters, {len(messages)} diagnostic messages")
         for line in messages[:12]:
             print("Healthy debugger message:", line[:230])
