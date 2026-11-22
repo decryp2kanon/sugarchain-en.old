@@ -28,6 +28,7 @@ $(package)_patches += fix-macos26-qyield.patch
 $(package)_patches += fix-qbytearray-include.patch
 ifeq ($(host_os),mingw32)
 $(package)_patches += qtbase_windows_localserver_shutdown.patch
+$(package)_patches += qtbase_windows_timer_thread_teardown.patch
 endif
 
 $(package)_qttranslations_file_name=$(qt_details_qttranslations_file_name)
@@ -290,6 +291,7 @@ define $(package)_preprocess_cmds
 endef
 ifeq ($(host_os),mingw32)
   $(package)_preprocess_cmds += && patch -p1 -i $($(package)_patch_dir)/qtbase_windows_localserver_shutdown.patch
+  $(package)_preprocess_cmds += && patch -p1 -i $($(package)_patch_dir)/qtbase_windows_timer_thread_teardown.patch
 endif
 ifeq ($(host),$(build))
   $(package)_preprocess_cmds += && patch -p1 -i $($(package)_patch_dir)/qttools_skip_dependencies.patch

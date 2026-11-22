@@ -26,6 +26,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--installer", required=True, type=Path)
     parser.add_argument("--work-dir", required=True, type=Path)
+    parser.add_argument("--with-wallet-restart", action="store_true",
+                        help="Check persistence across two native GUI launches after upgrading the installation")
     args = parser.parse_args()
     if os.name != "nt" or os.environ.get("GITHUB_ACTIONS") != "true":
         parser.error("Installer checks require an ephemeral Windows GitHub Actions runner")
@@ -74,7 +76,11 @@ def main():
     assert not any(path.exists() for path in obsolete)
 
     smoke = Path(__file__).with_name("ci-windows-smoke.py")
-    subprocess.run([sys.executable, str(smoke), "--bindir", str(install), "--work-dir", str(workdir / "installed-runtime")], check=True, timeout=300)
+    smoke_command = [sys.executable, str(smoke), "--bindir", str(install)]
+    if args.with_wallet_restart:
+        subprocess.run([*smoke_command, "--verify-wallet-restart", "--work-dir", str(workdir / "installed-wallet-restart")],
+                       check=True, timeout=300)
+    subprocess.run([*smoke_command, "--work-dir", str(workdir / "installed-runtime")], check=True, timeout=300)
     # Use no shell; all paths belong to this fresh runner-specific workspace.
     uninstaller = install / "uninstall.exe"
     subprocess.run(nsis_command(uninstaller, install, uninstall=True), check=True, timeout=180, shell=False)
@@ -82,6 +88,8 @@ def main():
     assert config.read_bytes() == expected_config
     assert extra.read_bytes() == expected_extra
     report = {"production_binaries": len(programs), "install": "passed", "upgrade": "passed", "native_runtime": "passed", "uninstall_preserves_user_files": "passed"}
+    if args.with_wallet_restart:
+        report["gui_wallet_restart"] = "passed"
     (workdir / "installer-results.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report))
 

@@ -350,6 +350,10 @@ jobs:
         if: matrix.job-type == 'standard'
         run: py -3 .github/ci-windows-smoke.py --bindir build/bin/Release --work-dir "${RUNNER_TEMP}/en-native-smoke"
 
+      - name: Reopen a saved wallet in the native GUI
+        if: matrix.job-type == 'standard'
+        run: py -3 .github/ci-windows-smoke.py --verify-wallet-restart --bindir build/bin/Release --work-dir "${RUNNER_TEMP}/en-native-wallet-restart"
+
       - name: Run tests
         env:
           TEST_RUNNER_EXTRA: "--timeout-factor=${{ env.TEST_RUNNER_TIMEOUT_FACTOR }} ${{ case(github.event_name == 'pull_request', '', '--extended') }}"
@@ -481,9 +485,12 @@ jobs:
       - name: Run native network, GUI and wallet smoke checks
         run: py -3 .github/ci-windows-smoke.py --bindir bin --work-dir "${RUNNER_TEMP}/en-cross-smoke-${{ matrix.crt }}"
 
+      - name: Reopen a saved wallet in the native GUI
+        run: py -3 .github/ci-windows-smoke.py --verify-wallet-restart --bindir bin --work-dir "${RUNNER_TEMP}/en-cross-wallet-restart-${{ matrix.crt }}"
+
       - name: Verify installed applications and installer lifecycle
         run: |
-          py -3 .github/ci-windows-installer.py \
+          py -3 .github/ci-windows-installer.py --with-wallet-restart \
             --installer "$(basename "$(cat windows-installer-path.txt)")" \
             --work-dir "${RUNNER_TEMP}/en-installer-${{ matrix.crt }}"
 
