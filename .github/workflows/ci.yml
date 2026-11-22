@@ -116,10 +116,9 @@ jobs:
         run: |
           git fetch --no-tags origin "$BASE_COMMIT"
           tip=$(git rev-parse HEAD^)
-          # The main matrix covers the PR head. A merge brings in changes
-          # tested by another PR, so check the first-parent series after it.
-          last_merge=$(git rev-list --first-parent --merges -n1 "$BASE_COMMIT..$tip")
-          git rev-list --first-parent --reverse "${last_merge:-$BASE_COMMIT}..$tip" > "$RUNNER_TEMP/ancestor-range"
+          # The main matrix covers the PR head. Keep earlier work on the PR
+          # after a merge and exclude the side branch by following first parents.
+          git rev-list --first-parent --reverse "$BASE_COMMIT..$tip" > "$RUNNER_TEMP/ancestor-range"
           mapfile -t ancestors < "$RUNNER_TEMP/ancestor-range"
           begin=$(( ${#ancestors[@]} * (BATCH - 1) / BATCHES ))
           end=$(( ${#ancestors[@]} * BATCH / BATCHES ))
