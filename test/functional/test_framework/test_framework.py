@@ -583,14 +583,21 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
         self.wait_until(lambda: find_conn(from_connection, to_connection_subver, inbound=False) is not None)
         self.wait_until(lambda: find_conn(to_connection, from_connection_subver, inbound=True) is not None)
 
-        def pong_processed(peer):
+        def handshake_complete(node, peer_subversion, inbound):
+            peer = find_conn(node, peer_subversion, inbound)
             assert peer is not None, "Error: peer disconnected"
-            return 'minping' in peer
+            if 'minping' in peer:
+                return True
+            # Before v0.21, a zero-duration pong does not set minping. A sent pong
+            # proves the message loop handled the other node's ping after verack.
+            return (
+                not node.version_is_at_least(210000)
+                and peer['bytessent_per_msg'].get('pong', 0) > 0
+                and peer['bytesrecv_per_msg'].get('pong', 0) > 0
+            )
 
-        # The socket can count pong bytes before the message loop processes them.
-        # minping is available after the first completed ping, even if it took 0 us.
-        self.wait_until(lambda: pong_processed(find_conn(from_connection, to_connection_subver, inbound=False)))
-        self.wait_until(lambda: pong_processed(find_conn(to_connection, from_connection_subver, inbound=True)))
+        self.wait_until(lambda: handshake_complete(from_connection, to_connection_subver, inbound=False))
+        self.wait_until(lambda: handshake_complete(to_connection, from_connection_subver, inbound=True))
 
     def disconnect_nodes(self, a, b):
         def disconnect_nodes_helper(node_a, node_b):
