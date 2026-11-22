@@ -197,6 +197,7 @@ class AddrTest(BitcoinTestFramework):
         self.log.info('Check that subsequent addr messages sent from an outbound peer are relayed')
         msg2 = self.setup_addr_msg(2)
         self.send_addr_msg(full_outbound_peer, msg2, [inbound_peer])
+        inbound_peer.wait_until(lambda: inbound_peer.num_ipv4_received >= len(msg2.addrs))
         assert_equal(inbound_peer.num_ipv4_received, 2)
 
         self.log.info('Check address relay to outbound peers')
@@ -205,6 +206,7 @@ class AddrTest(BitcoinTestFramework):
         self.send_addr_msg(inbound_peer, msg3, [full_outbound_peer, block_relay_peer])
 
         self.log.info('Check that addresses are relayed to full outbound peers')
+        full_outbound_peer.wait_until(lambda: full_outbound_peer.num_ipv4_received >= len(msg3.addrs))
         assert_equal(full_outbound_peer.num_ipv4_received, 2)
         self.log.info('Check that addresses are not relayed to block-relay-only outbound peers')
         assert_equal(block_relay_peer.num_ipv4_received, 0)
