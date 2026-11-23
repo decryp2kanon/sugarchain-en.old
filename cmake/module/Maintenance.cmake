@@ -66,6 +66,13 @@ function(add_macos_deploy_target)
     file(CONFIGURE OUTPUT "${macos_app}/Contents/Resources/Base.lproj/InfoPlist.strings"
       CONTENT "{ CFBundleDisplayName = \"@CLIENT_NAME@\"; CFBundleName = \"@CLIENT_NAME@\"; }"
     )
+    set(macos_bundle_resources
+      "${PROJECT_BINARY_DIR}/${macos_app}/Contents/Info.plist"
+      "${PROJECT_BINARY_DIR}/${macos_app}/Contents/PkgInfo"
+      "${PROJECT_BINARY_DIR}/${macos_app}/Contents/Resources/empty.lproj"
+      "${PROJECT_BINARY_DIR}/${macos_app}/Contents/Resources/sugarchain.icns"
+      "${PROJECT_BINARY_DIR}/${macos_app}/Contents/Resources/Base.lproj/InfoPlist.strings"
+    )
 
     add_custom_command(
       OUTPUT "${PROJECT_BINARY_DIR}/${macos_app}/Contents/MacOS/Sugarchain-Qt"
@@ -73,6 +80,9 @@ function(add_macos_deploy_target)
       COMMAND ${CMAKE_COMMAND} -E rename "${macos_app}/Contents/MacOS/bin/$<TARGET_FILE_NAME:bitcoin-qt>" "${macos_app}/Contents/MacOS/Sugarchain-Qt"
       COMMAND ${CMAKE_COMMAND} -E rm -rf "${macos_app}/Contents/MacOS/bin"
       COMMAND ${CMAKE_COMMAND} -E rm -rf "${macos_app}/Contents/MacOS/share"
+      # Resource-only changes also refresh the bundle's dependency timestamp.
+      COMMAND ${CMAKE_COMMAND} -E touch "${macos_app}/Contents/MacOS/Sugarchain-Qt"
+      DEPENDS bitcoin-qt ${macos_bundle_resources}
       VERBATIM
     )
 
@@ -85,6 +95,7 @@ function(add_macos_deploy_target)
         OUTPUT ${PROJECT_BINARY_DIR}/${macos_zip}.zip
         COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/contrib/macdeploy/macdeployqtplus "${macos_app}" -translations-dir=${QT_TRANSLATIONS_DIR} -zip=${macos_zip}
         DEPENDS "${PROJECT_BINARY_DIR}/${macos_app}/Contents/MacOS/Sugarchain-Qt"
+                ${PROJECT_SOURCE_DIR}/contrib/macdeploy/macdeployqtplus
         VERBATIM
       )
       add_custom_target(deploydir
@@ -100,7 +111,9 @@ function(add_macos_deploy_target)
       add_custom_command(
         OUTPUT "${PROJECT_BINARY_DIR}/dist/${macos_app}/Contents/MacOS/Sugarchain-Qt"
         COMMAND ${CMAKE_COMMAND} -E env OBJDUMP=${CMAKE_OBJDUMP} $<TARGET_FILE:Python3::Interpreter> ${PROJECT_SOURCE_DIR}/contrib/macdeploy/macdeployqtplus "${macos_app}" -translations-dir=${QT_TRANSLATIONS_DIR}
+        COMMAND ${CMAKE_COMMAND} -E touch "${PROJECT_BINARY_DIR}/dist/${macos_app}/Contents/MacOS/Sugarchain-Qt"
         DEPENDS "${PROJECT_BINARY_DIR}/${macos_app}/Contents/MacOS/Sugarchain-Qt"
+                ${PROJECT_SOURCE_DIR}/contrib/macdeploy/macdeployqtplus
         VERBATIM
       )
       add_custom_target(deploydir
@@ -117,6 +130,8 @@ function(add_macos_deploy_target)
           OUTPUT ${PROJECT_BINARY_DIR}/dist/${macos_zip}.zip
           WORKING_DIRECTORY dist
           COMMAND ${PROJECT_SOURCE_DIR}/cmake/script/macos_zip.sh ${ZIP_EXECUTABLE} ${macos_zip}.zip
+          DEPENDS "${PROJECT_BINARY_DIR}/dist/${macos_app}/Contents/MacOS/Sugarchain-Qt"
+                  ${PROJECT_SOURCE_DIR}/cmake/script/macos_zip.sh
           VERBATIM
         )
         add_custom_target(deploy

@@ -1,6 +1,8 @@
 # macOS Build Guide
 
-**Updated for MacOS [26](https://www.apple.com/os/macos/)**
+Sugarchain En supports macOS 14 or later on Apple Silicon and Intel.
+Build each architecture on its matching host, or use the corresponding
+`arm64-apple-darwin` / `x86_64-apple-darwin` depends toolchain.
 
 This guide describes how to build sugarchaind, command-line utilities, and GUI on macOS.
 
@@ -171,8 +173,10 @@ Run the following in your terminal to compile Sugarchain En:
 
 ``` bash
 cmake --build build     # Append "-j N" here for N parallel jobs.
-ctest --test-dir build  # Append "-j N" for N parallel tests.
+QT_QPA_PLATFORM=cocoa ctest --test-dir build  # Append "-j N" for N parallel tests.
 ```
+
+The Cocoa platform runs the application, wallet, and address book Qt test groups, which the minimal platform skips on macOS.
 
 ### 3. Deploy (optional)
 
@@ -181,6 +185,18 @@ You can also create a  `.zip` containing the `.app` bundle by running the follow
 ``` bash
 cmake --build build --target deploy
 ```
+
+The archive path is recorded in `build/macos-archive-path.txt`. It contains
+`Sugarchain En.app`; its executable is `Contents/MacOS/Sugarchain-Qt`.
+Native deployment bundles the Qt frameworks and platform plugins, then applies
+an ad hoc signature. This is a development package, not a notarized public
+release. Developer ID signing and notarization require separate credentials.
+
+The bundle does not force an Intel architecture preference. Launch Services
+selects the native architecture available in the executable.
+
+See [macOS deployment verification](../contrib/macdeploy/README.md#native-runtime-verification)
+for the packaged application checks performed on fresh macOS CI runners.
 
 ## Running Sugarchain En
 
@@ -191,6 +207,9 @@ There is also a multifunction command line interface at `./build/bin/sugarchain`
 supporting subcommands like `sugarchain node`, `sugarchain gui`, `sugarchain rpc`, and
 others that can be listed with `sugarchain help`.
 
+The public network is `main`; `regtest` is available for isolated development.
+Public testnet, testnet4, and signet startup is rejected.
+
 The first time you run `sugarchaind` or `sugarchain-qt`, it will start downloading the blockchain.
 This process could take many hours, or even days on slower than average systems.
 
@@ -199,6 +218,12 @@ By default, blockchain and wallet data files will be stored in:
 ``` bash
 /Users/${USER}/Library/Application Support/Sugarchain/
 ```
+
+This directory is unchanged by the En application rename. Existing blockchain
+and wallet files are not moved. GUI preferences use the Sugarchain En profile;
+an absent En profile is copied once from Sugarchain Komorebi, while the source
+and any existing En preferences are preserved. Back up wallets before migration;
+legacy Berkeley DB wallets require the explicit `migratewallet` procedure.
 
 Before running, you may create an empty configuration file:
 

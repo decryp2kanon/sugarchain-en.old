@@ -10,6 +10,35 @@ When complete, it produces `Sugarchain-En-<version>-macos.zip` containing
 `Sugarchain En.app`. The configured `macos-archive-path.txt` in the build
 directory records the archive path for the selected build environment.
 
+## Native runtime verification
+
+After unpacking a native shared-Qt deployment archive, macOS CI runs:
+
+```bash
+python3 contrib/macdeploy/verify-native.py \
+  --app "build/deploy/Sugarchain En.app" \
+  --bindir build/bin \
+  --work-dir "$RUNNER_TEMP/en-macos-app-smoke"
+```
+
+The helper requires a fresh GitHub Actions runner and a new work directory
+inside `RUNNER_TEMP`. It refuses existing Sugarchain preference files because
+macOS QSettings uses CFPreferences rather than XDG configuration paths. Run
+this check before Qt tests create application preferences. No home-directory
+override, desktop association change, or existing wallet is required.
+
+Verification includes the bundle identity, URI scheme, icon, Cocoa/minimal
+plugins, native architecture, and recursive signature. It starts the daemon
+and packaged GUI offline with explicit disposable data directories, then
+checks the installed CLI, mainnet `sugar1q` address generation, regtest mining,
+a confirmed wallet transfer, backup, normal shutdown, restart, and restoration.
+The GUI uses its packaged Cocoa Qt plugin; interactive UI actions are not
+covered. Results and logs remain in the work directory. This helper checks
+shared Qt linkage before requiring deployed plugin files. It does not validate
+the statically linked Qt packages produced by depends cross builds. Those
+archives need separate native execution and signature checks before a platform
+release is claimed.
+
 ## SDK Extraction
 
 ### Step 1: Obtaining `Xcode.app`

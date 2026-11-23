@@ -518,7 +518,7 @@ BOOST_AUTO_TEST_CASE(yespower_cache_binds_all_header_fields_and_current_rules)
     // Concurrent readers must neither corrupt the cache nor mix chain rules.
     std::atomic<bool> correct{true};
     {
-        std::vector<std::jthread> threads;
+        std::vector<std::thread> threads;
         for (int i{0}; i < 8; ++i) {
             threads.emplace_back([&] {
                 for (int j{0}; j < 100; ++j) {
@@ -528,6 +528,7 @@ BOOST_AUTO_TEST_CASE(yespower_cache_binds_all_header_fields_and_current_rules)
                 }
             });
         }
+        for (auto& thread : threads) thread.join();
     }
     BOOST_CHECK(correct.load());
 }
