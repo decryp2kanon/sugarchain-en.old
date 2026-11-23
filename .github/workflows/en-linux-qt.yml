@@ -27,6 +27,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: minimal
       CTEST_OUTPUT_ON_FAILURE: 1
+      TEST_RUNNER_TIMEOUT_FACTOR: 40
     steps:
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -35,6 +36,22 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          # Use Ubuntu's main archive for regional EC2 mirror URIs.
+          sudo python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          source = Path("/etc/apt/sources.list.d/ubuntu.sources")
+          if source.is_file():
+              original = source.read_bytes()
+              normalized = re.sub(
+                  rb"https?://[a-z0-9-]+\.ec2\.archive\.ubuntu\.com/ubuntu/?(?=\s|$)",
+                  b"https://archive.ubuntu.com/ubuntu/",
+                  original,
+              )
+              if normalized != original:
+                  source.write_bytes(normalized)
+          PY
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
             build-essential cmake ninja-build pkgconf python3 \
@@ -50,14 +67,20 @@ jobs:
             -DENABLE_WALLET=ON -DENABLE_IPC=ON -DBUILD_BENCH=OFF \
             -DWITH_ZMQ=ON -DWITH_USDT=ON
 
-      - name: Build applications and Qt tests
+      - name: Build all applications and native tests
         run: |
-          cmake --build build --parallel 2 --target \
-            bitcoind bitcoin-cli bitcoin bitcoin-node bitcoin-gui bitcoin-qt \
-            bitcoin-wallet test_bitcoin-qt
+          cmake --build build --parallel 2
 
-      - name: Run the complete Qt test executable
+      - name: Install applications and verify native runtime behavior
+        run: |
+          cmake --install build --prefix "${RUNNER_TEMP}/en-linux-prefix"
+          python3 .github/ci-windows-smoke.py \
+            --bindir "${RUNNER_TEMP}/en-linux-prefix/bin" \
+            --work-dir "${RUNNER_TEMP}/en-linux-native-smoke"
+
+      - name: Run all unit, IPC, recovery and Qt tests
         env:
+          DIR_UNIT_TEST_DATA: ${{ runner.temp }}/en-qt/unit-test-data
           XDG_CONFIG_HOME: ${{ runner.temp }}/en-qt/config
           XDG_DATA_HOME: ${{ runner.temp }}/en-qt/data
           XDG_CACHE_HOME: ${{ runner.temp }}/en-qt/cache
@@ -65,8 +88,19 @@ jobs:
         run: |
           mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
           install -d -m 700 "$XDG_RUNTIME_DIR"
+          mkdir -p "$DIR_UNIT_TEST_DATA"
+          curl --fail --location --silent --show-error --retry 3 \
+            --output "$DIR_UNIT_TEST_DATA/script_assets_test.json" \
+            https://raw.githubusercontent.com/bitcoin-core/qa-assets/2e9ddaf8b12b11485104d9b09eac0540ca6c0914/unit_test_data/script_assets_test.json
           ctest --test-dir build --output-on-failure --no-tests=error \
-            -R '^test_bitcoin-qt$' --output-junit qt-results.xml
+            --parallel 2 --timeout 2400 --output-junit native-test-results.xml
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          cases = ET.parse("build/native-test-results.xml").iter("testcase")
+          skipped = [case.attrib["name"] for case in cases if case.find("skipped") is not None or case.get("status") in {"notrun", "disabled"}]
+          if skipped:
+              raise SystemExit("CTest did not execute " + ", ".join(skipped))
+          PY
 
       - name: Upload failure diagnostics
         if: failure()
@@ -77,6 +111,6 @@ jobs:
             build/CMakeCache.txt
             build/CMakeFiles/CMakeConfigureLog.yaml
             build/Testing/Temporary/
-            build/qt-results.xml
+            build/native-test-results.xml
           if-no-files-found: ignore
           retention-days: 7

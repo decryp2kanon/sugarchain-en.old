@@ -78,6 +78,8 @@ pub fn get_pathspecs_default_excludes() -> Vec<String> {
         .iter()
         .chain(&[
             "doc/release-notes/release-notes-*", // archived notes
+            // Vendored upstream C formatting; not a git-subtree import.
+            "src/crypto/yespower-1.0.1/",
         ])
         .map(|s| format!(":(exclude){s}"))
         .collect()

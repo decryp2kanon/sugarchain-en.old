@@ -23,12 +23,19 @@ def main():
 
     num_procs = int(run(["nproc"], stdout=subprocess.PIPE).stdout)
     build_dir = "ci_build"
+    cmake_warnings = ["-Werror=dev"]
+    # CMake 4.5 diagnoses directory-wide build directives in historical sources.
+    if run(
+        ["cmake", "--help-diagnostic", "CMD_NON_TARGET_DIRECTIVE"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+    ).returncode == 0:
+        cmake_warnings.append("-Wno-error=non-target-directive")
 
     run([
         "cmake",
         "-B",
         build_dir,
-        "-Werror=dev",
+        *cmake_warnings,
         # Use clang++, because it is a bit faster and uses less memory than g++
         "-DCMAKE_C_COMPILER=clang",
         "-DCMAKE_CXX_COMPILER=clang++",

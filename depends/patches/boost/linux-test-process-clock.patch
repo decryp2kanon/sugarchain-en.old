@@ -1,0 +1,61 @@
+Read elapsed process CPU time from CLOCK_PROCESS_CPUTIME_ID on Linux.
+
+On 32-bit glibc, clock_t counts signed microseconds. Subtracting two
+clock() readings across the sign boundary can overflow before Boost.Test
+widens the result. Keep the CPU timestamp in seconds and nanoseconds so
+long parallel tests can also span several complete clock_t periods.
+
+--- a/libs/test/include/boost/test/utils/timer.hpp
++++ b/libs/test/include/boost/test/utils/timer.hpp
+@@ -98,7 +98,12 @@
+     }
+     void restart()
+     {
++    #if defined(__linux__)
++        if (::clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &_start_time_cpu) != 0)
++            _start_time_cpu.tv_nsec = -1;
++    #else
+         _start_time_clock = std::clock();
++    #endif
+     #if defined(BOOST_TEST_TIMER_WINDOWS_API)
+         ::QueryPerformanceCounter(&_start_time_wall);
+     #elif defined(BOOST_TEST_TIMER_MACH_API)
+@@ -116,11 +121,25 @@
+     elapsed_time elapsed() const
+     {
+       typedef elapsed_time::nanosecond_type nanosecond_type;
+-      static const double clock_to_nano_seconds = 1E9 / CLOCKS_PER_SEC;
+       elapsed_time return_value;
+
+       // processor / system time
++#if defined(__linux__)
++      struct timespec end_time_cpu;
++      return_value.system = 0;
++      if (_start_time_cpu.tv_nsec >= 0 && ::clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time_cpu) == 0) {
++          nanosecond_type seconds = static_cast<nanosecond_type>(end_time_cpu.tv_sec) - _start_time_cpu.tv_sec;
++          long nanoseconds = end_time_cpu.tv_nsec - _start_time_cpu.tv_nsec;
++          if (nanoseconds < 0) {
++              --seconds;
++              nanoseconds += 1000000000;
++          }
++          return_value.system = seconds * 1000000000 + nanoseconds;
++      }
++#else
++      static const double clock_to_nano_seconds = 1E9 / CLOCKS_PER_SEC;
+       return_value.system = static_cast<nanosecond_type>(double(std::clock() - _start_time_clock) * clock_to_nano_seconds);
++#endif
+
+ #if defined(BOOST_TEST_TIMER_WINDOWS_API)
+       static const nanosecond_type tick_per_sec = details::get_tick_freq();
+@@ -144,7 +163,11 @@
+     }
+
+    private:
++    #if defined(__linux__)
++      struct timespec _start_time_cpu;
++    #else
+       std::clock_t _start_time_clock;
++    #endif
+     #if defined(BOOST_TEST_TIMER_WINDOWS_API)
+       LARGE_INTEGER _start_time_wall;
+     #elif defined(BOOST_TEST_TIMER_MACH_API)

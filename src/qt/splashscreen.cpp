@@ -176,13 +176,13 @@ std::string FormatBlockIndexSplashMessage(const std::string& message)
         return message + "\n ";
     }
     static const std::string prefix{"Loading block index: "};
-    if (message.compare(0, prefix.size(), prefix) != 0) {
+    if (!message.starts_with(prefix)) {
         // Keep progress details in the core log; the splash uses two lines only.
         const std::string stages[]{"Preparing block index", "Sorting block index", "Linking block index",
             "Collecting block file references", "Checking block files", "Preparing block headers",
             "Sorting block headers", "Selecting best block header"};
         for (const auto& stage : stages) {
-            if (message.compare(0, stage.size(), stage) != 0) continue;
+            if (!message.starts_with(stage)) continue;
             const size_t body{message.find(": ")};
             const size_t separator{message.find(" | ")};
             const size_t end{separator == std::string::npos ? message.size() : separator};

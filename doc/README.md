@@ -9,7 +9,7 @@ The Sugarchain homepage is https://sugarchain.org/.
 
 Current release preparation targets Linux first; Windows and macOS are deferred.
 See the [Linux candidate build/package guide](sugarchain-en-linux-release.md) and
-[En draft release notes](release-notes/sugarchain-en-draft.md). No public En release
+[En draft release notes](sugarchain-en-draft-release-notes.md). No public En release
 or download is announced by these preparation documents. See the [native validation record](sugarchain-en-native-validation-2026-11-18.md) for local coverage and explicit exclusions, and the [native benchmark record](sugarchain-en-native-benchmarks-2026-11-18.md) for bounded component observations.
 
 This directory also retains upstream Bitcoin Core technical references, BIPs,

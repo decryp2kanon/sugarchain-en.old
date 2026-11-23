@@ -39,6 +39,12 @@ class SelfAnnouncementReceiver(P2PInterface):
         self.expected = expected
         self.addrv2_test = addrv2
 
+    def wait_for_addr_messages(self, count):
+        # Scheduled addr messages can follow both pong replies. Wait for the
+        # addresses first, then drain queued messages before checking the counts.
+        self.wait_until(lambda: self.addr_messages_received >= count)
+        self.sync_with_ping()
+
     def handle_addr_message(self, message):
         self.addr_messages_received += 1
         for addr in message.addrs:
@@ -118,7 +124,7 @@ class AddrSelfAnnouncementTest(BitcoinTestFramework):
             else:
                 self.log.info(f"Check that we get an initial self-announcement when connecting to a node and sending a GETADDR ({connection_type}, {addr_version})")
                 addr_receiver = self.nodes[0].add_p2p_connection(SelfAnnouncementReceiver(expected=expected, addrv2=addrv2))
-            addr_receiver.sync_with_ping()
+            addr_receiver.wait_for_addr_messages(1 if outbound else 2)
 
         if outbound:
             self.outbound_connection_open_assertions(addr_receiver)
@@ -142,7 +148,7 @@ class AddrSelfAnnouncementTest(BitcoinTestFramework):
                 # the event will occur (i.e. this fails once in ~500 million repeats).
                 addr_receiver.expected.time = self.nodes[0].mocktime + 20 * ONE_DAY
                 self.nodes[0].bumpmocktime(20 * ONE_DAY)
-                addr_receiver.sync_with_ping()
+                addr_receiver.wait_for_addr_messages(last_addr_messages_received + 1)
 
             assert_equal(addr_receiver.self_announcements_received, last_self_announcements_received + 1)
             assert_equal(addr_receiver.addr_messages_received, last_addr_messages_received + 1)

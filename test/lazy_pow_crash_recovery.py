@@ -25,6 +25,13 @@ import time
 RUN_DEADLINE = None
 
 
+def timeout_budget():
+    budget = 60 * float(os.environ.get("TEST_RUNNER_TIMEOUT_FACTOR", "15"))
+    if not math.isfinite(budget) or budget <= 0:
+        raise ValueError("TEST_RUNNER_TIMEOUT_FACTOR must be positive and finite")
+    return budget
+
+
 def progress_key(event, mode, point):
     """Validate the child protocol; only new structured progress resets idle time."""
     if not isinstance(event, dict):
@@ -87,10 +94,15 @@ def file_tail(path, limit=2048):
 
 
 def run_child(binary, root, mode, point="", workers=8, expect_error=False, *,
-              idle_timeout=120, deadline=None):
+              idle_timeout=None, deadline=None):
     started = time.monotonic()
+    budget = timeout_budget()
+    if idle_timeout is None:
+        # Instrumented builds can be slow before the first structured event.
+        # Validated progress remains mandatory, and the overall deadline wins.
+        idle_timeout = max(120, budget / 8)
     if deadline is None:
-        deadline = RUN_DEADLINE if RUN_DEADLINE is not None else started + 900
+        deadline = RUN_DEADLINE if RUN_DEADLINE is not None else started + budget
     idle_deadline = started + idle_timeout
     seen_progress = set()
     counter = root / ".invocation-count"
@@ -231,9 +243,7 @@ def main():
     args = parser.parse_args()
     assert 1 <= args.repetitions <= 10
     binary = args.test_binary.resolve(strict=True)
-    budget = 60 * float(os.environ.get("TEST_RUNNER_TIMEOUT_FACTOR", "15"))
-    if not math.isfinite(budget) or budget <= 0:
-        raise ValueError("TEST_RUNNER_TIMEOUT_FACTOR must be positive and finite")
+    budget = timeout_budget()
     global RUN_DEADLINE
     RUN_DEADLINE = time.monotonic() + budget - min(30, budget / 10)
     if args.output:

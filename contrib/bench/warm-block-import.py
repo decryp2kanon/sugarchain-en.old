@@ -16,8 +16,7 @@ import struct
 import sys
 import time
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "test/functional"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "test/functional"))
 
 from test_framework.messages import CBlockHeader, MAGIC_BYTES, msg_headers
 from test_framework.p2p import P2PInterface

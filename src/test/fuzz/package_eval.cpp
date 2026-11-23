@@ -30,6 +30,8 @@ const TestingSetup* g_setup;
 std::vector<COutPoint> g_outpoints_coinbase_init_mature;
 
 struct MockedTxPool : public CTxMemPool {
+    using CTxMemPool::CTxMemPool;
+
     void RollingFeeUpdate() EXCLUSIVE_LOCKS_REQUIRED(!cs)
     {
         LOCK(cs);
@@ -115,7 +117,7 @@ void MockTime(FuzzedDataProvider& fuzzed_data_provider, const Chainstate& chains
     SetMockTime(time);
 }
 
-std::unique_ptr<CTxMemPool> MakeMempool(FuzzedDataProvider& fuzzed_data_provider, const NodeContext& node)
+std::unique_ptr<MockedTxPool> MakeMempool(FuzzedDataProvider& fuzzed_data_provider, const NodeContext& node)
 {
     // Take the default options for tests...
     CTxMemPool::Options mempool_opts{MemPoolOptionsForTest(node)};
@@ -134,14 +136,14 @@ std::unique_ptr<CTxMemPool> MakeMempool(FuzzedDataProvider& fuzzed_data_provider
 
     bilingual_str error;
     // ...and construct a CTxMemPool from it
-    auto mempool{std::make_unique<CTxMemPool>(std::move(mempool_opts), error)};
+    auto mempool{std::make_unique<MockedTxPool>(std::move(mempool_opts), error)};
     // ... ignore the error since it might be beneficial to fuzz even when the
     // mempool size is unreasonably small
     Assert(error.empty() || error.original.starts_with("-maxmempool must be at least "));
     return mempool;
 }
 
-std::unique_ptr<CTxMemPool> MakeEphemeralMempool(const NodeContext& node)
+std::unique_ptr<MockedTxPool> MakeEphemeralMempool(const NodeContext& node)
 {
     // Take the default options for tests...
     CTxMemPool::Options mempool_opts{MemPoolOptionsForTest(node)};
@@ -156,7 +158,7 @@ std::unique_ptr<CTxMemPool> MakeEphemeralMempool(const NodeContext& node)
 
     bilingual_str error;
     // ...and construct a CTxMemPool from it
-    auto mempool{std::make_unique<CTxMemPool>(std::move(mempool_opts), error)};
+    auto mempool{std::make_unique<MockedTxPool>(std::move(mempool_opts), error)};
     Assert(error.empty());
     return mempool;
 }
@@ -211,7 +213,7 @@ FUZZ_TARGET(ephemeral_package_eval, .init = initialize_tx_pool)
     node.validation_signals->RegisterSharedValidationInterface(outpoints_updater);
 
     auto tx_pool_{MakeEphemeralMempool(node)};
-    MockedTxPool& tx_pool = *static_cast<MockedTxPool*>(tx_pool_.get());
+    MockedTxPool& tx_pool = *tx_pool_;
 
     chainstate.SetMempool(&tx_pool);
 
@@ -366,7 +368,7 @@ FUZZ_TARGET(tx_package_eval, .init = initialize_tx_pool)
     node.validation_signals->RegisterSharedValidationInterface(outpoints_updater);
 
     auto tx_pool_{MakeMempool(fuzzed_data_provider, node)};
-    MockedTxPool& tx_pool = *static_cast<MockedTxPool*>(tx_pool_.get());
+    MockedTxPool& tx_pool = *tx_pool_;
 
     chainstate.SetMempool(&tx_pool);
 

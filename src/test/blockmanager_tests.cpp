@@ -149,6 +149,7 @@ BOOST_AUTO_TEST_CASE(startup_height_sort_preserves_repeated_pointers)
     std::array<CBlockIndex, 17> storage;
     for (size_t i = 0; i < storage.size(); ++i) storage[i].nHeight = static_cast<int>(i) - 8;
     std::vector<CBlockIndex*> indexes;
+    indexes.reserve(4096);
     for (size_t i = 0; i < 4096; ++i) indexes.push_back(&storage[(i * 11) % storage.size()]);
     const std::multiset<CBlockIndex*> expected{indexes.begin(), indexes.end()};
     node::SortBlockIndicesByHeight(indexes);

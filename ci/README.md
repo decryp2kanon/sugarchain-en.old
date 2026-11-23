@@ -89,6 +89,7 @@ To configure the primary repository, follow these steps:
    1. actions/cache/save@\*
    1. actions/github-script@\*
    1. docker/setup-buildx-action@\*
+   1. docker/setup-qemu-action@\*
    1. warpbuilds/cache/restore@\*
    1. warpbuilds/cache/save@\*
 

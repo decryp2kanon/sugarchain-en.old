@@ -7,6 +7,7 @@
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
+#include <util/strencodings.h>
 #include <util/string.h>
 
 #include <leveldb/db.h>
@@ -139,7 +140,9 @@ BOOST_AUTO_TEST_CASE(small_table_cache_preserves_reads_across_eviction)
         for (int level = 0; level < 7; ++level) {
             std::string count;
             BOOST_REQUIRE(db->GetProperty(strprintf("leveldb.num-files-at-level%d", level), &count));
-            tables += std::stoul(count);
+            const auto table_count{ToIntegral<size_t>(count)};
+            BOOST_REQUIRE(table_count.has_value());
+            tables += *table_count;
         }
         BOOST_REQUIRE_GT(tables, 16U); // Force reads across more tables than the cache can retain.
     }

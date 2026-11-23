@@ -12,10 +12,12 @@
 #include <streams.h>
 #include <test/data/sugarchain_headers.raw.h>
 #include <test/util/logging.h>
+#include <test/util/pow.h>
 #include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <uint256.h>
 #include <util/chaintype.h>
+#include <util/string.h>
 #include <util/time.h>
 
 #include <boost/test/unit_test.hpp>
@@ -181,13 +183,8 @@ BOOST_AUTO_TEST_CASE(target_division_matches_generic_arithmetic)
             rules.powLimit = limit;
             const int64_t expected_span{rules.AveragingWindowTimespan()};
             const auto check = [&](const arith_uint256& total, int64_t span) {
-                int64_t adjusted{expected_span + (span - expected_span) / 4};
-                adjusted = std::clamp(adjusted, rules.MinActualTimespan(), rules.MaxActualTimespan());
-                arith_uint256 reference{total / arith_uint256{uint64_t(window)}};
-                reference /= arith_uint256{uint64_t(expected_span)};
-                reference *= adjusted;
-                if (reference > UintToArith256(limit)) reference = UintToArith256(limit);
-                BOOST_CHECK_EQUAL(CalculateSugarShieldWorkRequired(total, span, rules), reference.GetCompact());
+                BOOST_CHECK_EQUAL(CalculateSugarShieldWorkRequired(total, span, rules),
+                                  ReferenceSugarShieldWorkRequired(total, span, rules));
             };
             for (int64_t span : {-expected_span, int64_t{0}, expected_span, 5 * expected_span}) {
                 check(arith_uint256{0}, span);
@@ -402,7 +399,7 @@ BOOST_AUTO_TEST_CASE(invalid_difficulty_with_valid_pow_in_both_passes)
                 }
                 // This diagnostic is emitted only when the difficulty helper
                 // returns false, before any REDOWNLOAD commitment comparison.
-                ASSERT_DEBUG_LOG("invalid difficulty transition at height=" + std::to_string(height) +
+                ASSERT_DEBUG_LOG("invalid difficulty transition at height=" + util::ToString(height) +
                                  (redownload ? " (redownload phase)" : " (presync phase)"));
                 const auto result{sync.ProcessNextHeaders(std::span{&bad, 1}, true)};
                 BOOST_CHECK(!result.success);

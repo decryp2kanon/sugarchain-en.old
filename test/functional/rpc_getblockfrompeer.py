@@ -47,11 +47,16 @@ class GetBlockFromPeerTest(BitcoinTestFramework):
         assert_equal(self.nodes[0].getblockcount(), 204)
 
         self.log.info("Mine competing 3 blocks on Node 1")
-        self.generate(self.nodes[1], 3, sync_fun=self.no_op)
+        short_chain = self.generate(self.nodes[1], 3, sync_fun=self.no_op)
         assert_equal(self.nodes[1].getblockcount(), 203)
         short_tip = self.nodes[1].getbestblockhash()
 
-        self.log.info("Connect nodes to sync headers")
+        # Node 1 may adopt the longer chain before answering node 0's header request.
+        # Give node 0 the short branch's headers while keeping its blocks on node 1.
+        for block_hash in short_chain:
+            self.nodes[0].submitheader(self.nodes[1].getblockheader(block_hash, verbose=False))
+
+        self.log.info("Connect nodes to sync the active chain")
         self.connect_nodes(0, 1)
         self.sync_blocks(self.nodes[0:2])
 

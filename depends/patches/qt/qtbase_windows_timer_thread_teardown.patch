@@ -1,0 +1,31 @@
+Backport Qt 6.8.5 LTS bb66b247aa01d0d8d85dde33484e9b35149be09f.
+Avoid adopting a new thread when an active timer outlives its event dispatcher.
+https://github.com/qt/qtbase/commit/bb66b247aa01d0d8d85dde33484e9b35149be09f
+
+diff --git a/qtbase/src/corelib/kernel/qbasictimer.cpp b/qtbase/src/corelib/kernel/qbasictimer.cpp
+index f78698a7ecf8..319da95dfe9e 100644
+--- a/qtbase/src/corelib/kernel/qbasictimer.cpp
++++ b/qtbase/src/corelib/kernel/qbasictimer.cpp
+@@ -5,6 +5,8 @@
+ #include "qabstracteventdispatcher.h"
+ #include "qabstracteventdispatcher_p.h"
+
++#include <private/qthread_p.h>
++
+ QT_BEGIN_NAMESPACE
+
+ /*!
+@@ -186,7 +188,12 @@ void QBasicTimer::start(std::chrono::milliseconds duration, Qt::TimerType timerT
+ void QBasicTimer::stop()
+ {
+     if (isActive()) {
+-        QAbstractEventDispatcher *eventDispatcher = QAbstractEventDispatcher::instance();
++        QAbstractEventDispatcher *eventDispatcher = nullptr;
++
++        // don't create the current thread data if it's already been destroyed
++        if (QThreadData *data = QThreadData::current(false))
++            eventDispatcher = data->eventDispatcher.loadRelaxed();
++
+         if (eventDispatcher && !eventDispatcher->unregisterTimer(m_id)) {
+             qWarning("QBasicTimer::stop: Failed. Possibly trying to stop from a different thread");
+             return;

@@ -14,8 +14,7 @@ from pathlib import Path
 import sys
 import time
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'test/functional'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'test/functional'))
 from test_framework.blocktools import create_block, create_coinbase
 from test_framework.messages import CBlockHeader, MSG_BLOCK, MSG_TYPE_MASK, msg_block, msg_headers
 from test_framework.p2p import NetworkThread, P2PDataStore, p2p_lock

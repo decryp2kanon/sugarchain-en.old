@@ -13,6 +13,8 @@
 #include <txdb.h>
 #include <validation.h>
 
+#include <limits>
+
 using kernel::CBlockFileInfo;
 
 namespace {
@@ -101,7 +103,7 @@ FUZZ_TARGET(block_index, .init = init_block_index)
     auto stored_header{blocks.back()->GetBlockHeader()};
     stored_header.hashPrevBlock = g_block_hash;
     while (!CheckProofOfWork(stored_header.GetPoWHash(), stored_header.nBits, params)) {
-        ++stored_header.nNonce;
+        stored_header.nNonce = stored_header.nNonce == std::numeric_limits<uint32_t>::max() ? 0 : stored_header.nNonce + 1;
     }
     blocks.back()->nNonce = stored_header.nNonce;
     assert(CheckBlockProofOfWork(stored_header, params));

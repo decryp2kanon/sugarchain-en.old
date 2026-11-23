@@ -4,6 +4,7 @@
 // Link into an isolated diagnostic executable with -Wl,--wrap=yespower.
 // Never substitutes a result or changes the production verification path.
 #include <crypto/yespower-1.0.1/yespower.h>
+#include <util/string.h>
 
 #include <atomic>
 #include <cstdio>
@@ -20,8 +21,14 @@ unsigned long long ThreadTime()
 struct Report {
     ~Report()
     {
-        std::fprintf(stderr, "YESPOWER_PROFILE {\"calls\":%llu,\"cpu_ns\":%llu,\"failed\":%llu}\n",
-                     calls.load(), cpu_ns.load(), failed.load());
+        std::string message{"YESPOWER_PROFILE {\"calls\":"};
+        message += util::ToString(calls.load());
+        message += ",\"cpu_ns\":";
+        message += util::ToString(cpu_ns.load());
+        message += ",\"failed\":";
+        message += util::ToString(failed.load());
+        message += "}\n";
+        std::fwrite(message.data(), 1, message.size(), stderr);
     }
 } report;
 }

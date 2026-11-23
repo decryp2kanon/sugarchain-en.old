@@ -7,6 +7,7 @@
 
 #include <kernel/notifications_interface.h>
 #include <tinyformat.h>
+#include <util/string.h>
 #include <cstdint>
 #include <string>
 
@@ -29,8 +30,8 @@ class StartupProgress
     }
     static std::string Group(uint64_t count)
     {
-        std::string result{std::to_string(count)};
-        for (size_t pos = result.size(); pos > 3; pos -= 3) result.insert(pos - 3, ",");
+        std::string result{util::ToString(count)};
+        for (size_t pos = result.size(); pos > 3; pos -= 3) result.insert(pos - 3, 1, ',');
         return result;
     }
 public:

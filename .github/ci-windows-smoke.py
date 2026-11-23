@@ -209,28 +209,46 @@ def windows_fault_module(process, started_ns):
 
 class Node:
     def __init__(self, binary, datadir, chain, gui=False):
+        self.binary = binary
         self.datadir = datadir
         self.chain = chain
-        self.wallet = None
+        self.gui = gui
         datadir.mkdir(parents=True)
+        self.cookie = datadir / ("regtest/.cookie" if chain == "regtest" else ".cookie")
+        self._start()
+
+    def _start(self, *, restart=False):
+        self.wallet = None
         with socket.socket() as listener:
             listener.bind(("127.0.0.1", 0))
             self.port = listener.getsockname()[1]
         command = [
-            str(binary), f"-datadir={datadir}", f"-rpcport={self.port}",
+            str(self.binary), f"-datadir={self.datadir}", f"-rpcport={self.port}",
             "-server=1", "-listen=0", "-connect=0", "-dnsseed=0", "-discover=0",
             "-debug=http", "-debug=rpc", "-debug=coindb",
             "-networkactive=0", "-maxconnections=0", "-keypool=10",
             "-fallbackfee=0.0002", "-printtoconsole=0",
         ]
-        if chain == "regtest":
+        if self.chain == "regtest":
             command.append("-regtest")
-        if gui:
+        if self.gui:
             command += ["-splash=0", "-min", "-debug=qt"]
-        self.cookie = datadir / ("regtest/.cookie" if chain == "regtest" else ".cookie")
-        self.log = (datadir / "process.log").open("wb")
+        self.debug_log = self.cookie.parent / ("restart-debug.log" if restart else "debug.log")
+        if restart:
+            command.append(f"-debuglogfile={self.debug_log}")
+        self.log = (self.datadir / ("restart-process.log" if restart else "process.log")).open("xb")
         self.started_ns = time.time_ns()
-        self.process = subprocess.Popen(command, stdout=self.log, stderr=subprocess.STDOUT, env=runtime_environment(datadir))
+        try:
+            self.process = subprocess.Popen(command, stdout=self.log, stderr=subprocess.STDOUT, env=runtime_environment(self.datadir))
+        except OSError:
+            self.log.close()
+            raise
+
+    def restart(self):
+        if self.process.returncode != 0:
+            raise RuntimeError("Restart requires a successful shutdown")
+        self._start(restart=True)
+        return self
 
     def __enter__(self):
         return self
@@ -265,12 +283,12 @@ class Node:
         deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
-                raise RuntimeError(f"Node exited before RPC startup; see {self.datadir / 'process.log'}")
+                raise RuntimeError(f"Node exited before RPC startup; see {self.log.name}")
             try:
                 return self.rpc("getblockchaininfo")
             except (OSError, RuntimeError):
                 time.sleep(0.1)
-        raise RuntimeError(f"Node startup timed out; see {self.datadir / 'process.log'}")
+        raise RuntimeError(f"Node startup timed out; see {self.log.name}")
 
     def close(self):
         try:
@@ -285,7 +303,7 @@ class Node:
                     self.process.wait(timeout=15)
                     raise
             if self.process.returncode != 0:
-                detail = shutdown_detail(self.cookie.parent / "debug.log")
+                detail = shutdown_detail(self.debug_log)
                 if os.name == "nt":
                     module = windows_fault_module(self.process, self.started_ns) or "unavailable"
                     detail += f", Windows faulting module {module}"
@@ -348,15 +366,53 @@ def check_node(binary, cli, datadir, chain, gui=False):
         return {"chain": chain, "gui": gui, "height": node.rpc("getblockcount"), "wallet": "passed"}
 
 
+def check_wallet_restart(binary, datadir):
+    wallet_name = "저축 지갑"
+    with Node(binary, datadir, "main", gui=True) as node:
+        info = node.wait()
+        assert info["chain"] == "main", info
+        created = node.rpc("createwallet", wallet_name, False, False, "", False, True, True)
+        assert created["name"] == wallet_name, created
+        node.wallet = wallet_name
+        address = node.rpc("getnewaddress", "", "bech32")
+        assert address.startswith("sugar1q"), address
+        assert node.rpc("getaddressinfo", address)["ismine"]
+    first_exit_code = node.process.returncode
+
+    with node.restart():
+        info = node.wait()
+        assert info["chain"] == "main", info
+        loaded_wallets = node.rpc("listwallets")
+        assert wallet_name in loaded_wallets, loaded_wallets
+        node.wallet = wallet_name
+        saved_name = node.rpc("getwalletinfo")["walletname"]
+        assert saved_name == wallet_name, saved_name
+        saved_address = node.rpc("getaddressinfo", address)
+        assert saved_address["address"] == address and saved_address["ismine"], saved_address
+
+    return {
+        "status": "passed", "wallet_name": saved_name, "loaded_on_restart": saved_name in loaded_wallets,
+        "address": saved_address["address"], "address_is_mine": saved_address["ismine"], "first_exit_code": first_exit_code,
+        "restart_exit_code": node.process.returncode,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bindir", required=True, type=Path)
     parser.add_argument("--workdir", "--work-dir", dest="workdir", type=Path)
+    parser.add_argument("--verify-wallet-restart", action="store_true", help="Run the Korean-named GUI wallet restart check")
     args = parser.parse_args()
     bindir = args.bindir.resolve()
     workdir = args.workdir.resolve() if args.workdir else Path(tempfile.mkdtemp(prefix="sugarchain-en-smoke-"))
     workdir.mkdir(parents=True, exist_ok=True)
     suffix = ".exe" if os.name == "nt" else ""
+    if args.verify_wallet_restart:
+        report = check_wallet_restart(bindir / f"sugarchain-qt{suffix}", workdir / "gui-wallet-restart")
+        with (workdir / "wallet-restart-results.json").open("x", encoding="utf-8") as output:
+            output.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+        print(json.dumps(report))
+        return
     programs = ["sugarchain", "sugarchaind", "sugarchain-cli", "sugarchain-qt", "sugarchain-wallet", "sugarchain-tx", "sugarchain-util"]
     binaries = {}
     version_datadir = workdir / "version-data"

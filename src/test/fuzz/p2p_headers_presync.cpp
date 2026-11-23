@@ -4,6 +4,7 @@
 
 #include <arith_uint256.h>
 #include <blockencodings.h>
+#include <chain.h>
 #include <net.h>
 #include <net_processing.h>
 #include <netmessagemaker.h>
@@ -19,8 +20,18 @@
 #include <uint256.h>
 #include <validation.h>
 
+#include <cstdint>
+#include <limits>
+
 namespace {
 constexpr uint32_t FUZZ_MAX_HEADERS_RESULTS{16};
+constexpr uint32_t FUZZ_MAX_MESSAGES{100};
+constexpr uint32_t FUZZ_MAX_GENERATED_HEADERS{FUZZ_MAX_HEADERS_RESULTS * FUZZ_MAX_MESSAGES};
+
+struct TargetRange {
+    arith_uint256 minimum;
+    arith_uint256 maximum;
+};
 
 class HeadersSyncSetup : public TestingSetup
 {
@@ -100,25 +111,16 @@ void HeadersSyncSetup::SendMessage(FuzzedDataProvider& fuzzed_data_provider, CSe
     m_node.peerman->SendMessages(connection);
 }
 
-CBlockHeader ConsumeHeader(FuzzedDataProvider& fuzzed_data_provider, const uint256& prev_hash, uint32_t prev_nbits)
+CBlockHeader ConsumeHeader(FuzzedDataProvider& fuzzed_data_provider, const uint256& prev_hash, uint32_t prev_nbits, const TargetRange& target_range)
 {
     CBlockHeader header;
     header.nNonce = 0;
-    // Either use the previous difficulty or let the fuzzer choose. The upper target in the
-    // range comes from the bits value of the genesis block, which is 0x1d00ffff. The lower
-    // target comes from the bits value of mainnet block 840000, which is 0x17034219.
-    // Calling lower_target.SetCompact(0x17034219) and upper_target.SetCompact(0x1d00ffff)
-    // should return the values below.
-    //
-    // RPC commands to verify:
-    // getblockheader 000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f
-    // getblockheader 0000000000000000000320283a032748cef8227873ff4872689bf23f1cda83a5
+    // Either retain the previous difficulty or choose a native target whose
+    // claimed work remains below the anti-DoS floor for the entire input.
     if (fuzzed_data_provider.ConsumeBool()) {
         header.nBits = prev_nbits;
     } else {
-        arith_uint256 lower_target = UintToArith256(uint256{"0000000000000000000342190000000000000000000000000000000000000000"});
-        arith_uint256 upper_target = UintToArith256(uint256{"00000000ffff0000000000000000000000000000000000000000000000000000"});
-        arith_uint256 target = ConsumeArithUInt256InRange(fuzzed_data_provider, lower_target, upper_target);
+        arith_uint256 target = ConsumeArithUInt256InRange(fuzzed_data_provider, target_range.minimum, target_range.maximum);
         header.nBits = target.GetCompact();
     }
     header.nTime = TicksSinceEpoch<std::chrono::seconds>(ConsumeTime(fuzzed_data_provider));
@@ -127,9 +129,9 @@ CBlockHeader ConsumeHeader(FuzzedDataProvider& fuzzed_data_provider, const uint2
     return header;
 }
 
-CBlock ConsumeBlock(FuzzedDataProvider& fuzzed_data_provider, const uint256& prev_hash, uint32_t prev_nbits)
+CBlock ConsumeBlock(FuzzedDataProvider& fuzzed_data_provider, const uint256& prev_hash, uint32_t prev_nbits, const TargetRange& target_range)
 {
-    auto header = ConsumeHeader(fuzzed_data_provider, prev_hash, prev_nbits);
+    auto header = ConsumeHeader(fuzzed_data_provider, prev_hash, prev_nbits, target_range);
     // In order to reach the headers acceptance logic, the block is
     // constructed in a way that will pass the mutation checks.
     CBlock block{header};
@@ -145,8 +147,10 @@ CBlock ConsumeBlock(FuzzedDataProvider& fuzzed_data_provider, const uint256& pre
 
 void FinalizeHeader(CBlockHeader& header, const ChainstateManager& chainman)
 {
-    while (!CheckProofOfWork(header.GetHash(), header.nBits, chainman.GetParams().GetConsensus())) {
-        ++(header.nNonce);
+    const auto& consensus{chainman.GetParams().GetConsensus()};
+    assert(DeriveTarget(header.nBits, consensus.powLimit));
+    while (!CheckBlockProofOfWork(header, consensus)) {
+        header.nNonce = header.nNonce == std::numeric_limits<uint32_t>::max() ? 0 : header.nNonce + 1;
     }
 }
 
@@ -185,13 +189,25 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     // The chain is just a single block, so this is equal to 1
     size_t original_index_size{WITH_LOCK(cs_main, return chainman.m_blockman.m_block_index.size())};
     arith_uint256 total_work{WITH_LOCK(cs_main, return chainman.m_best_header->nChainWork)};
+    assert(total_work < chainman.MinimumChainWork());
+    const auto available_work{chainman.MinimumChainWork() - total_work};
+    // Leave half of the available work as headroom for compact-target rounding.
+    // Unlike Bitcoin difficulty constants, this budget uses the native work floor.
+    const auto maximum_header_work{available_work / (2 * FUZZ_MAX_GENERATED_HEADERS)};
+    assert(maximum_header_work > 0);
+    const TargetRange target_range{
+        .minimum = ~arith_uint256{} / maximum_header_work,
+        .maximum = UintToArith256(chainman.GetParams().GetConsensus().powLimit),
+    };
+    assert(target_range.minimum <= target_range.maximum);
+    assert(GetBitsProof(target_range.minimum.GetCompact()) * FUZZ_MAX_GENERATED_HEADERS < available_work);
 
     std::vector<CBlockHeader> all_headers;
 
-    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), 100)
+    LIMITED_WHILE(fuzzed_data_provider.ConsumeBool(), FUZZ_MAX_MESSAGES)
     {
         auto finalized_block = [&]() {
-            CBlock block = ConsumeBlock(fuzzed_data_provider, base.GetHash(), base.nBits);
+            CBlock block = ConsumeBlock(fuzzed_data_provider, base.GetHash(), base.nBits, target_range);
             FinalizeHeader(block, chainman);
             return block;
         };
@@ -204,7 +220,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
                 std::vector<CBlock> headers;
                 headers.resize(FUZZ_MAX_HEADERS_RESULTS);
                 for (CBlock& header : headers) {
-                    header = ConsumeHeader(fuzzed_data_provider, base.GetHash(), base.nBits);
+                    header = ConsumeHeader(fuzzed_data_provider, base.GetHash(), base.nBits, target_range);
                     FinalizeHeader(header, chainman);
                     base = header;
                 }
@@ -236,7 +252,7 @@ FUZZ_TARGET(p2p_headers_presync, .init = initialize)
     }
 
     // This is a conservative overestimate, as base is only moved forward when sending headers. In theory,
-    // the longest chain generated by this test is 1600 (FUZZ_MAX_HEADERS_RESULTS * 100) headers. In that case,
+    // the longest chain generated by this test is FUZZ_MAX_GENERATED_HEADERS headers. In that case,
     // this variable will accurately reflect the chain's total work.
     total_work += CalculateClaimedHeadersWork(all_headers);
 

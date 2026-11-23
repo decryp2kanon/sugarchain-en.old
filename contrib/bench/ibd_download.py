@@ -14,14 +14,19 @@ The helper does not enforce resource limits; apply external controls. Preparatio
 is outside acceptance timing. I/O ends after final sync/check, before shutdown.
 Child RSS assumes the daemon is the only sizable child. See doc/ibd-download-window.md.
 """
-import hashlib, json, os, statistics, sys, threading, time, resource
+import hashlib
+import json
+import os
+import resource
+import sys
+import threading
+import time
 from pathlib import Path
-sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'test' / 'functional'))
 from test_framework.blocktools import create_block, create_coinbase
 from test_framework.script import CScript, OP_RETURN
 from test_framework.messages import CBlockHeader, msg_block, msg_headers, MSG_BLOCK, MSG_TYPE_MASK
-from test_framework.p2p import P2PInterface, NetworkThread, p2p_lock
+from test_framework.p2p import P2PInterface, NetworkThread
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 

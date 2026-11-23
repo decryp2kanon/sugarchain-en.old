@@ -37,24 +37,24 @@
 #include <util/result.h>
 #include <util/signalinterrupt.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 #include <util/syserror.h>
 #include <util/time.h>
 #include <util/translation.h>
 #include <validation.h>
 
+// pdqsort is an implementation detail of integer_sort's small-range fallback.
+// IWYU pragma: no_include <boost/sort/pdqsort/pdqsort.hpp>
 #include <boost/sort/spreadsort/integer_sort.hpp>
 
 #include <array>
 #include <cerrno>
-#include <chrono>
-#include <thread>
-#include <cmath>
 #include <compare>
 #include <cstddef>
 #include <cstdio>
 #include <cstdint>
-#include <cstring>
 #include <exception>
+#include <initializer_list>
 #include <limits>
 #include <map>
 #include <new>
@@ -64,6 +64,7 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -71,8 +72,8 @@ namespace kernel {
 namespace {
 std::string FormatGroupedCount(uint64_t count)
 {
-    std::string result{std::to_string(count)};
-    for (size_t pos = result.size(); pos > 3; pos -= 3) result.insert(pos - 3, ",");
+    std::string result{util::ToString(count)};
+    for (size_t pos = result.size(); pos > 3; pos -= 3) result.insert(pos - 3, 1, ',');
     return result;
 }
 } // namespace

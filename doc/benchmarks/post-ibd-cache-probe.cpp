@@ -12,10 +12,12 @@
 #include <util/translation.h>
 
 #include <chrono>
+#include <charconv>
 #include <fstream>
 #include <iostream>
 #include <malloc.h>
 #include <string>
+#include <string_view>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -27,6 +29,13 @@ uint256 Key(uint64_t n)
     uint256 key;
     for (int i{0}; i < 8; ++i) key.data()[i] = (n >> (8 * i)) & 255;
     return key;
+}
+
+bool ParseCount(const char* argument, uint64_t& count)
+{
+    const std::string_view input{argument};
+    const auto result{std::from_chars(input.data(), input.data() + input.size(), count)};
+    return result.ec == std::errc{} && result.ptr == input.data() + input.size();
 }
 
 size_t Rss()
@@ -78,7 +87,8 @@ int main(int argc, char** argv)
         return 2;
     }
     const std::string mode{argv[1]};
-    const uint64_t proofs{std::stoull(argv[3])}, count{std::stoull(argv[4])};
+    uint64_t proofs{}, count{};
+    if (!ParseCount(argv[3], proofs) || !ParseCount(argv[4], count)) return 2;
     if ((mode != "none" && mode != "proof" && mode != "coins" && mode != "both") ||
         count == 0 || proofs > UINT32_MAX || (argc == 6 && std::string{argv[5]} != "dirty")) return 2;
 

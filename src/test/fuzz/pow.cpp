@@ -9,10 +9,12 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
+#include <test/util/pow.h>
 #include <util/chaintype.h>
 #include <util/check.h>
 #include <util/overflow.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -86,17 +88,45 @@ FUZZ_TARGET(pow, .init = initialize_pow)
     }
 }
 
+// Include a full median-time window at both endpoints of the mainnet average.
+static void CheckSugarShieldTransition(const Consensus::Params& params, uint32_t divisor, uint32_t spacing)
+{
+    const auto window{static_cast<uint32_t>(params.nPowAveragingWindow)};
+    const uint32_t half{window / 2};
+    const arith_uint256 limit{UintToArith256(params.powLimit)};
+    const uint32_t limit_bits{limit.GetCompact()};
+    const arith_uint256 harder{limit / arith_uint256{uint64_t{divisor} + 1}};
+    const uint32_t harder_bits{harder.GetCompact()};
+
+    std::vector<CBlockIndex> blocks(window + CBlockIndex::nMedianTimeSpan);
+    for (size_t height = 0; height < blocks.size(); ++height) {
+        auto& block{blocks[height]};
+        block.pprev = height ? &blocks[height - 1] : nullptr;
+        block.nHeight = static_cast<int>(height);
+        block.nTime = static_cast<uint32_t>(height) * spacing;
+        block.nBits = height < CBlockIndex::nMedianTimeSpan + half ? harder_bits : limit_bits;
+    }
+    // A late tip changes its timestamp but leaves both endpoint medians unchanged.
+    blocks.back().nTime += static_cast<uint32_t>(params.AveragingWindowTimespan());
+    Assert(GetNextWorkRequired(&blocks[window - 1], nullptr, params) == limit_bits);
+
+    const arith_uint256 sum{arith_uint256{}.SetCompact(harder_bits) * half +
+                            arith_uint256{}.SetCompact(limit_bits) * (window - half)};
+    const auto expected{ReferenceSugarShieldWorkRequired(sum, int64_t{window} * spacing, params)};
+    Assert(GetNextWorkRequired(&blocks.back(), nullptr, params) == expected);
+}
 
 FUZZ_TARGET(pow_transition, .init = initialize_pow)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
-    const Consensus::Params& consensus_params{Params().GetConsensus()};
+    const auto consensus_params{BitcoinMainnetPowParams()};
     std::vector<std::unique_ptr<CBlockIndex>> blocks;
 
     const uint32_t old_time{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
     const uint32_t new_time{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
     const int32_t version{fuzzed_data_provider.ConsumeIntegral<int32_t>()};
-    uint32_t nbits{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+    const auto input_bits{fuzzed_data_provider.ConsumeIntegral<uint32_t>()};
+    uint32_t nbits{input_bits};
 
     const arith_uint256 pow_limit = UintToArith256(consensus_params.powLimit);
     arith_uint256 old_target;
@@ -121,4 +151,8 @@ FUZZ_TARGET(pow_transition, .init = initialize_pow)
     auto last_block{blocks.back().get()};
     unsigned int new_nbits{GetNextWorkRequired(last_block, nullptr, consensus_params)};
     Assert(PermittedDifficultyTransition(consensus_params, last_block->nHeight + 1, last_block->nBits, new_nbits));
+
+    const auto& mainnet{Params().GetConsensus()};
+    const auto spacing{fuzzed_data_provider.ConsumeIntegralInRange<uint32_t>(1, 4 * mainnet.nPowTargetSpacing)};
+    CheckSugarShieldTransition(mainnet, input_bits, spacing);
 }

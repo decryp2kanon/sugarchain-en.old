@@ -17,11 +17,11 @@
 #include <primitives/block.h>
 #include <serialize.h>
 #include <streams.h>
+#include <support/allocators/pool.h>
 #include <sync.h>
 #include <uint256.h>
 #include <util/expected.h>
 #include <util/fs.h>
-#include <util/hasher.h>
 #include <util/obfuscation.h>
 
 #include <algorithm>

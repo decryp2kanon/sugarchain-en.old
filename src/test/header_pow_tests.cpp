@@ -349,6 +349,7 @@ BOOST_FIXTURE_TEST_CASE(historical_scan_survives_invalid_headers_flood, TestingS
 
     constexpr unsigned peers{64};
     std::vector<CBlockHeader> forged;
+    forged.reserve(peers);
     for (unsigned i{0}; i < peers; ++i) {
         auto bad{forged.empty() ? headers.back() : forged.back()};
         do { ++bad.nNonce; } while (CheckProofOfWorkImpl(bad.GetPoWHash(), bad.nBits, consensus));
@@ -647,6 +648,7 @@ BOOST_AUTO_TEST_CASE(mainnet_hashes_match_legacy_tls_bit_for_bit)
     static constexpr uint8_t personal[]{"Satoshi Nakamoto 31/Oct/2008 Proof-of-work is essentially one-CPU-one-vote"};
     const yespower_params_t official{YESPOWER_1_0, 2048, 32, personal, sizeof(personal) - 1};
     std::vector<uint256> expected, actual(headers.size());
+    expected.reserve(headers.size());
     for (const auto& header : headers) {
         DataStream serialized;
         serialized << header;

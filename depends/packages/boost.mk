@@ -5,6 +5,14 @@ $(package)_file_name = boost-$($(package)_version)-cmake.tar.gz
 $(package)_sha256_hash = 913ca43d49e93d1b158c9862009add1518a4c665e7853b349a6492d158b036d4
 $(package)_build_subdir = build
 
+ifeq ($(host_os),linux)
+$(package)_patches = linux-test-process-clock.patch
+
+define $(package)_preprocess_cmds
+  patch -p1 < $($(package)_patch_dir)/linux-test-process-clock.patch
+endef
+endif
+
 define $(package)_set_vars
   $(package)_config_opts = -DBOOST_INCLUDE_LIBRARIES="multi_index;signals2;sort;test"
   $(package)_config_opts += -DBOOST_TEST_HEADERS_ONLY=ON

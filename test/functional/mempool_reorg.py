@@ -106,8 +106,8 @@ class MempoolCoinbaseTest(BitcoinTestFramework):
             assert_equal(peer1.last_message["tx"].tx.wtxid_hex,tx_disconnected["tx"].wtxid_hex)
 
         self.nodes[1].setmocktime(int(time.time()) + 300)
-        peer1.sync_with_ping()
-        # the transactions are now announced
+        # A pong can arrive before the peer receives the inventory.
+        peer1.wait_for_broadcast([tx_disconnected["wtxid"], tx_before_reorg["wtxid"], tx_child["wtxid"]])
         assert_equal(len(peer1.get_invs()), 3)
         for _ in range(3):
             # make sure all tx requests have been responded to

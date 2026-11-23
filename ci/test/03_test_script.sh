@@ -45,15 +45,38 @@ env
 echo "=== END env ==="
 
 if [ "$RUN_FUZZ_TESTS" = "true" ]; then
-  export DIR_FUZZ_IN=${DIR_QA_ASSETS}/fuzz_corpora/
-  if [ ! -d "$DIR_FUZZ_IN" ]; then
-    ${CI_RETRY_EXE} git clone --depth=1 https://github.com/bitcoin-core/qa-assets "${DIR_QA_ASSETS}"
+  qa_assets_url=https://github.com/bitcoin-core/qa-assets
+  if [[ -n "${QA_ASSETS_COMMIT:-}" ]]; then
+    mkdir -p "$BASE_SCRATCH_DIR"
+    replay_workdir=$(mktemp -d "$BASE_SCRATCH_DIR/qa-replay.XXXXXX")
+    trap 'rm -rf -- "$replay_workdir"' EXIT
+    DIR_QA_ASSETS="$replay_workdir/qa-assets"
+    git init --quiet "$DIR_QA_ASSETS"
+    git -C "$DIR_QA_ASSETS" remote add origin "$qa_assets_url"
+    if [[ -n "${REPLAY_CORPUS_SHARD:-}" ]]; then
+      git -C "$DIR_QA_ASSETS" config remote.origin.promisor true
+      git -C "$DIR_QA_ASSETS" config remote.origin.partialclonefilter blob:none
+      git -C "$DIR_QA_ASSETS" sparse-checkout set --cone "fuzz_corpora/$FUZZ_TESTS_CONFIG"
+    fi
+    ${CI_RETRY_EXE} git -C "$DIR_QA_ASSETS" fetch --no-tags --depth=1 origin "$QA_ASSETS_COMMIT"
+    ${CI_RETRY_EXE} git -C "$DIR_QA_ASSETS" checkout --quiet --detach "$QA_ASSETS_COMMIT"
+  elif [ ! -d "$DIR_QA_ASSETS/fuzz_corpora" ]; then
+    ${CI_RETRY_EXE} git clone --depth=1 "$qa_assets_url" "$DIR_QA_ASSETS"
   fi
+  export DIR_FUZZ_IN="$DIR_QA_ASSETS/fuzz_corpora/"
   (
     cd "${DIR_QA_ASSETS}"
     echo "Using qa-assets repo from commit ..."
     git log -1
   )
+  if [[ -n "${REPLAY_CORPUS_SHARD:-}" ]]; then
+    : "${QA_ASSETS_COMMIT:?A frozen QA revision is required}"
+    DIR_FUZZ_IN="$replay_workdir/shard"
+    mkdir "$DIR_FUZZ_IN"
+    python3 "$BASE_ROOT_DIR/ci/test/prepare_replay_shard.py" \
+      "$DIR_QA_ASSETS" "$QA_ASSETS_COMMIT" \
+      "$FUZZ_TESTS_CONFIG" "$REPLAY_CORPUS_SHARD" "$DIR_FUZZ_IN"
+  fi
 elif [ "$RUN_UNIT_TESTS" = "true" ]; then
   export DIR_UNIT_TEST_DATA=${DIR_QA_ASSETS}/unit_test_data/
   if [ ! -d "$DIR_UNIT_TEST_DATA" ]; then
@@ -80,6 +103,10 @@ fi
 if [ "$DOWNLOAD_PREVIOUS_RELEASES" = "true" ]; then
   test/get_previous_releases.py --target-dir "$PREVIOUS_RELEASES_DIR"
 fi
+if [ "$DOWNLOAD_SUGARCHAIN_RELEASE" = "true" ]; then
+  export SUGARCHAIN_LEGACY_BINARY
+  SUGARCHAIN_LEGACY_BINARY=$(python3 .github/ci-legacy-release.py --target-dir "${BASE_SCRATCH_DIR}/sugarchain-legacy-release")
+fi
 
 BITCOIN_CONFIG_ALL="-DCMAKE_COMPILE_WARNING_AS_ERROR=ON -DBUILD_BENCH=ON -DBUILD_FUZZ_BINARY=ON"
 if [ -z "$NO_DEPENDS" ]; then
@@ -92,6 +119,10 @@ ccache --zero-stats
 BASE_BUILD_DIR=${BASE_BUILD_DIR:-$BASE_SCRATCH_DIR/build-$HOST}
 
 BITCOIN_CONFIG_ALL="$BITCOIN_CONFIG_ALL -DCMAKE_INSTALL_PREFIX=$BASE_OUTDIR -Werror=dev"
+# CMake 4.5 reports directory-wide build directives under -Werror=dev.
+if cmake --help-diagnostic CMD_NON_TARGET_DIRECTIVE >/dev/null 2>&1; then
+  BITCOIN_CONFIG_ALL="$BITCOIN_CONFIG_ALL -Wno-error=non-target-directive"
+fi
 
 if [[ "${RUN_IWYU}" == true || "${RUN_TIDY}" == true ]]; then
   BITCOIN_CONFIG_ALL="$BITCOIN_CONFIG_ALL -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
@@ -137,13 +168,20 @@ if [ "$RUN_CHECK_DEPS" = "true" ]; then
   "${BASE_ROOT_DIR}/contrib/devtools/check-deps.sh" "${BASE_BUILD_DIR}"
 fi
 
-if [[ "$CI_OS_NAME" == "macos" && "${GOAL}" = "install deploy" ]]; then
+if [[ "$CI_OS_NAME" == "macos" && " ${GOAL} " == *" deploy "* ]]; then
   macos_archive=$(cat "${BASE_BUILD_DIR}/macos-archive-path.txt")
   unzip "${macos_archive}" -d "${BASE_BUILD_DIR}/deploy"
   if ! ( codesign --verify "${BASE_BUILD_DIR}/deploy/Sugarchain En.app" ); then
     echo "Codesigning failed."
     false
   fi
+  python3 contrib/macdeploy/verify-native.py \
+    --app "${BASE_BUILD_DIR}/deploy/Sugarchain En.app" \
+    --bindir "${BASE_OUTDIR}/bin" \
+    --work-dir "${RUNNER_TEMP}/en-macos-app-smoke"
+elif [[ "$HOST" == *-apple-darwin* && " ${GOAL} " == *" deploy "* ]]; then
+  macos_archive=$(cat "${BASE_BUILD_DIR}/macos-archive-path.txt")
+  python3 contrib/macdeploy/verify_bundle.py "${macos_archive}" "${HOST%%-*}"
 fi
 
 if [ "$RUN_UNIT_TESTS" = "true" ]; then
@@ -224,9 +262,9 @@ if [ "$RUN_FUZZ_TESTS" = "true" ]; then
   # shellcheck disable=SC2086
   LD_LIBRARY_PATH="${DEPENDS_DIR}/${HOST}/lib" \
   "${BASE_BUILD_DIR}/test/fuzz/test_runner.py" \
-    ${FUZZ_TESTS_CONFIG} \
     "${MAKEJOBS}" \
     -l DEBUG \
+    --empty_min_time=60 \
     "${DIR_FUZZ_IN}" \
-    --empty_min_time=60
+    ${FUZZ_TESTS_CONFIG}
 fi

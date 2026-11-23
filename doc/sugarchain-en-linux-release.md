@@ -1,12 +1,12 @@
 # Linux-first candidate build and package guide
 
-Linux is the current release-preparation target. Windows and macOS native execution, installation, and packaging are deferred. No public En release, download, tag, release date, or Linux support matrix is announced here. Private candidate artifacts and checksums follow validation; public release approval is a separate decision.
+This guide covers the Linux candidate. Windows and macOS native execution, installation, and packaging are covered by their platform guides and the final cross-platform CI. No public En release, download, tag, release date, or Linux support matrix is announced here. Private candidate artifacts and checksums follow validation; public release approval is a separate decision.
 
 ## Version and scope
 
 The current source is based on Bitcoin Core 31.1 and identifies itself as Sugarchain En 31.1.0. `CMakeLists.txt` sets major/minor/build to `31/1/0`, RC to `0`, and `CLIENT_VERSION_IS_RELEASE` to `false`. The upstream version numbers are retained, while the false release flag identifies this En build as a prerelease candidate. These values are not an En publication announcement. Do not assign an En tag or release date from the upstream version.
 
-Record the exact source commit, compiler, build options, Linux distribution, architecture, dependency versions, and validation results for each private candidate. An existing local build or an older measurement does not validate a later source revision. The [En draft notes](release-notes/sugarchain-en-draft.md) describe the current compatibility scope; [upstream release notes](release-notes.md) remain historical references.
+Record the exact source commit, compiler, build options, Linux distribution, architecture, dependency versions, and validation results for each private candidate. An existing local build or an older measurement does not validate a later source revision. The [En draft notes](sugarchain-en-draft-release-notes.md) describe the current compatibility scope; [upstream release notes](release-notes.md) remain historical references.
 
 ## Build a production candidate
 
@@ -56,7 +56,7 @@ The CMake install provides binaries, manpages, desktop metadata, icons, and lice
 
 ```sh
 install -m 644 README.md doc/sugarchain-en-linux-release.md \
-  doc/release-notes/sugarchain-en-draft.md "$en_release_stage/share/doc/SugarchainEn/"
+  doc/sugarchain-en-draft-release-notes.md "$en_release_stage/share/doc/SugarchainEn/"
 install -m 644 share/examples/sugarchain.conf "$en_release_stage/sugarchain.conf"
 cp -R share/rpcauth "$en_release_stage/share/"
 ```

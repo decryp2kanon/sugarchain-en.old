@@ -18,6 +18,7 @@
 #include <test/util/setup_common.h>
 #include <txmempool.h>
 #include <util/chaintype.h>
+#include <util/string.h>
 #include <validation.h>
 
 #include <algorithm>
@@ -58,8 +59,8 @@ int main(int argc, char** argv)
         const bool log_coindb{argc == 7 && std::string_view{argv[6]} == "--log-coindb"};
         const bool log_info_file{argc == 7 && std::string_view{argv[6]} == "--log-info-file"};
         if (argc == 7 && !log_coindb && !log_info_file) throw std::runtime_error("Unknown diagnostic option");
-        const std::string dbcache_arg{"-dbcache=" + std::to_string(dbcache)};
-        const std::string mempool_arg{"-maxmempool=" + std::to_string(mempool_mb)};
+        const std::string dbcache_arg{"-dbcache=" + util::ToString(dbcache)};
+        const std::string mempool_arg{"-maxmempool=" + util::ToString(mempool_mb)};
         const auto setup{MakeNoLogFileContext<ChainTestingSetup>(ChainType::MAIN,
             TestOpts{.extra_args={"-checkblockindex=0", "-assumevalid=0", dbcache_arg.c_str(), mempool_arg.c_str(),
                                  log_info_file ? "-debuglogfile=benchmark-debug.log" : "-nodebuglogfile",

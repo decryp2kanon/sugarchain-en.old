@@ -191,6 +191,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_test(NAME lazy_pow_crash_recovery
       COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/test/lazy_pow_crash_recovery.py --test-binary $<TARGET_FILE:test_bitcoin>)
     # Respect the caller's CTest timeout; the harness also bounds overall and idle time.
+    # The recovery suite runs up to eight proof workers in a single CTest job.
+    set_tests_properties(lazy_pow_crash_recovery PROPERTIES PROCESSORS 8)
   endif()
 endif()
 

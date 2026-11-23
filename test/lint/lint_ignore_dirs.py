@@ -5,6 +5,8 @@
 # file COPYING or https://opensource.org/license/mit.
 
 SHARED_EXCLUDED_SUBTREES = ["src/leveldb/",
+                 # Vendored Yespower C retains upstream formatting and guards.
+                 "src/crypto/yespower-1.0.1/",
                  "src/crc32c/",
                  "src/secp256k1/",
                  "src/minisketch/",

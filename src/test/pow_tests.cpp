@@ -5,6 +5,7 @@
 #include <chain.h>
 #include <chainparams.h>
 #include <pow.h>
+#include <test/util/pow.h>
 #include <test/util/random.h>
 #include <test/util/common.h>
 #include <test/util/setup_common.h>
@@ -13,18 +14,6 @@
 #include <boost/test/unit_test.hpp>
 
 BOOST_FIXTURE_TEST_SUITE(pow_tests, BasicTestingSetup)
-
-// These historical Bitcoin retarget vectors must not use Sugarchain En's mainnet
-// parameters. Keep the original expected results and explicitly select the
-// Bitcoin Core v31 mainnet PoW rules for these algorithm tests.
-static Consensus::Params BitcoinMainnetPowParams()
-{
-    Consensus::Params params{};
-    params.powLimit = uint256{"00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
-    params.nPowTargetTimespan = 14 * 24 * 60 * 60;
-    params.nPowTargetSpacing = 10 * 60;
-    return params;
-}
 
 /* Test calculation of next difficulty target with no constraints applying */
 BOOST_AUTO_TEST_CASE(get_next_work)

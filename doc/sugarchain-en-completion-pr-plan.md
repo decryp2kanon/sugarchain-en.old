@@ -9,13 +9,13 @@ Priority: **3: Mandatory; 2: Required; 1: Important; 0: Optional.**
 ## Current state
 
 - Branding is merged in PR #17; Qt expectations are fixed in PR #18.
-- CI setup is merged in PR #19. Both GitHub workflows are currently disabled at the owner's request.
+- CI setup is merged in PR #19. The owner authorized re-enabling both GitHub workflows and running the complete cross-platform CI after the remaining implementation on 2026-11-18.
 - [PR #20](https://github.com/decryp2kanon/sugarchain-en/pull/20) is closed without merge. Preserve its branch and commits as reference material for item 9.
 - Native mainnet addresses and legacy signed-message compatibility are merged in PRs #22 and #23. Generated plain/encrypted legacy wallets passed migration, ownership, signing and backup/restore checks.
 - Required build prerequisites, unsupported public-network rejection and native wallet output policy are merged in PRs #21, #24 and #25.
 - Linux desktop/package integration and four key-flow translations are merged in PRs #26 and #27. Strict local production builds and isolated runtime checks passed.
 - Linux prerelease metadata, candidate guidance and generated command manuals are merged in PR #28.
-- Linux is the current release target. Windows and macOS are deferred follow-up work. This execution creates validation candidates only; it does not authorize a public release.
+- The owner expanded this execution to include the remaining Windows and macOS support and the complete CI matrix on 2026-11-18. Public release publication and signing remain separate actions.
 - Native regression coverage and bounded persistent-proof recovery are complete; see the [validation record](sugarchain-en-native-validation-2026-11-18.md). Historical full-chain evidence remains explicitly historical. All 173 benchmark sanity cases and bounded native component measurements are complete; see the [benchmark record](sugarchain-en-native-benchmarks-2026-11-18.md). No additional optimization is proposed without a justified comparison. CI stays disabled.
 
 ## PR sequence
@@ -27,14 +27,14 @@ Priority: **3: Mandatory; 2: Required; 1: Important; 0: Optional.**
 | 3 | Separate required production-core fixes | **2** | Assess PR #20's Yespower workspace lifetime, proof-cache locking, and related runtime changes. Extract only justified fixes into focused PRs. Preserve existing consensus rules. |
 | 4 | Complete Linux packaging | **2** | Finish executable paths, desktop integration, settings migration, package metadata, and license information. |
 | 5 | Complete Windows execution and installation | **2, conditional** | Complete native execution, installation, and settings migration if Windows is a release target. Otherwise record the exclusion. |
-| 6 | Complete macOS execution and packaging | **2, conditional** | Complete native execution, packaging, and settings migration if macOS is a release target. Currently deferred; otherwise record the exclusion. |
+| 6 | Complete macOS execution and packaging | **2, conditional** | Complete native execution, packaging, and settings migration if macOS is a release target. Validate the native deployed app and both cross-compilation targets before claiming completion. |
 | 7 | Improve important user-facing messages | **1** | Resolve incomplete or incorrect messages and translations on commonly used screens. |
 | 8 | Prepare the En release configuration | **2** | Prepare version metadata, release notes, supported platforms, and package contents. Final artifacts and checksums follow final validation. |
 | 9 | Reintroduce native regression coverage using closed PR #20 | **2** | Prepare a fresh PR against the then-current `en` branch. Adapt the preserved native fixtures and tests to the finished core. Include remaining test expectation repairs, including IBD output formatting. |
 | 10 | Validate operation at mainnet scale | **2** | Reuse applicable completed IBD evidence. Check large-index startup, synchronization, restart, CPU, and memory behavior affected by subsequent changes. |
 | 11 | Align benchmarks and measure performance | **1** | Reuse applicable benchmark work from PR #20. Preserve representative workloads and measure runtime, CPU, and memory. |
 | 12 | Improve measured bottlenecks | **1** | Create a separate PR for each justified optimization. Compare correctness and resource use against its baseline. Omit this item if no improvement is justified. |
-| 13 | Restore and complete final CI | **2** | Deferred beyond this execution. After preceding implementation and local validation are complete, obtain an explicit instruction before re-enabling workflows or running any CI. Then resolve supported-platform build and test failures. |
+| 13 | Restore and complete final CI | **2** | Authorized on 2026-11-18. Re-enable workflows after implementation, execute every configured platform and analysis job, and resolve failures before merging the final changes. |
 
 ## Closed PR #20 reference
 
@@ -57,3 +57,7 @@ Use its [validation record](https://github.com/decryp2kanon/sugarchain-en/blob/4
 ## Priority 0: no scheduled PR required
 
 No PR is planned for Doxygen generation, bulk renaming of internal Bitcoin identifiers, or complete translation of every supported language. Preserve original copyright notices and historical records.
+
+## Final cross-platform execution
+
+Windows and macOS follow-ups are tracked in PRs #31 and #32. The final integration PR adds the required native runtime and installer/bundle checks and restores the full CI matrix. Their source changes must not be considered validated on Windows or macOS until the corresponding hosted-runner jobs pass. The final Actions run is the authoritative execution record; local Linux checks are supplementary. No original wallet or operating-node data is used.

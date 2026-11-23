@@ -338,7 +338,13 @@ unsigned int CalculateSugarShieldWorkRequired(const arith_uint256& total, int64_
     span = std::clamp(span, params.MinActualTimespan(), params.MaxActualTimespan());
     arith_uint256 next = DivideSugarShieldTarget(total, params.nPowAveragingWindow);
     next = DivideSugarShieldTarget(next, params.AveragingWindowTimespan());
-    next *= span;
+    // Mainnet's clamped timespan fits one limb; synthetic large windows must
+    // retain the full multiplier instead of narrowing it to uint32_t.
+    if (span <= std::numeric_limits<uint32_t>::max()) {
+        next *= static_cast<uint32_t>(span);
+    } else {
+        next *= arith_uint256{static_cast<uint64_t>(span)};
+    }
     if (next > limit) next = limit;
     return next.GetCompact();
 }

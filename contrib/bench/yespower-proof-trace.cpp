@@ -5,6 +5,7 @@
 // Always call the real implementation; record inputs, never substitute results.
 #include <crypto/common.h>
 #include <crypto/yespower-1.0.1/yespower.h>
+#include <util/string.h>
 
 #include <algorithm>
 #include <array>
@@ -36,9 +37,20 @@ struct Trace {
             }
             written &= std::fclose(file) == 0;
         }
-        std::fprintf(stderr, "YESPOWER_TRACE {\"calls\":%llu,\"unique\":%zu,\"failures\":%llu,\"parameters_ok\":%s,\"overflow\":%s,\"written\":%s}\n",
-                     static_cast<unsigned long long>(calls), inputs.size(), static_cast<unsigned long long>(failures),
-                     parameters_ok ? "true" : "false", overflow ? "true" : "false", written ? "true" : "false");
+        std::string message{"YESPOWER_TRACE {\"calls\":"};
+        message += util::ToString(calls);
+        message += ",\"unique\":";
+        message += util::ToString(inputs.size());
+        message += ",\"failures\":";
+        message += util::ToString(failures);
+        message += ",\"parameters_ok\":";
+        message += parameters_ok ? "true" : "false";
+        message += ",\"overflow\":";
+        message += overflow ? "true" : "false";
+        message += ",\"written\":";
+        message += written ? "true" : "false";
+        message += "}\n";
+        std::fwrite(message.data(), 1, message.size(), stderr);
     }
 };
 Trace& GetTrace() { static Trace trace; return trace; }

@@ -15,13 +15,13 @@ import re
 import struct
 import sys
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / 'test/functional'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'test/functional'))
 from test_framework.messages import MAGIC_BYTES
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.test_node import ErrorMatch
 from test_framework.util import assert_equal
 
+ROOT = Path(__file__).resolve().parents[2]
 MAGIC = bytes.fromhex('9feb4b9d')
 REPORT = re.compile(r'^YESPOWER_TRACE \{[^\n]+\}$')
 
