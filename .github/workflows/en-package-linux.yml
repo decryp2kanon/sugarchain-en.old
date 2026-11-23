@@ -1,0 +1,81 @@
+name: En release packages (Linux)
+on:
+  push:
+    branches: [release-packaging/31.1.0-en.1]
+    paths: ['.github/workflows/en-package-linux.yml', '.github/release/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux:
+    name: Linux / ${{ matrix.host }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: x86_64-linux-gnu
+            runner: ubuntu-24.04
+            emulator: native
+          - host: aarch64-linux-gnu
+            runner: ubuntu-24.04-arm
+            emulator: native
+          - host: arm-linux-gnueabihf
+            runner: ubuntu-24.04
+            emulator: qemu-arm
+          - host: riscv64-linux-gnu
+            runner: ubuntu-24.04
+            emulator: qemu-riscv64
+          - host: powerpc64-linux-gnu
+            runner: ubuntu-24.04
+            emulator: qemu-ppc64
+    env:
+      RELEASE_HOST: ${{ matrix.host }}
+      RELEASE_EMULATOR: ${{ matrix.emulator }}
+      SOURCE_REVISION: dcb49b28c4636a79213ff75351019c43d1cbb789
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v6
+        with:
+          ref: dcb49b28c4636a79213ff75351019c43d1cbb789
+          path: source
+          persist-credentials: false
+      - name: Check out package tools
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          path: build-tools
+          sparse-checkout: .github/release
+          persist-credentials: false
+      - name: Install target toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          packages=(bison build-essential curl file gperf ninja-build patch pkgconf python3 xz-utils xauth xvfb fonts-dejavu-core)
+          if [[ "$RELEASE_EMULATOR" != native ]]; then
+            packages+=("g++-$RELEASE_HOST" "binutils-$RELEASE_HOST" qemu-user)
+          fi
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends "${packages[@]}"
+      - name: Restore dependency build cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            source/depends/built
+            source/depends/sources
+          key: sugarchain-en-linux-depends-v1-${{ matrix.host }}-${{ hashFiles('source/depends/**') }}
+      - name: Build and verify release archive
+        shell: bash
+        run: |
+          cd source
+          xvfb-run -a bash ../build-tools/.github/release/package-linux.sh
+      - name: Retain verified Linux archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-linux-${{ matrix.host }}
+          path: source/out/*
+          if-no-files-found: error
+          compression-level: 0
